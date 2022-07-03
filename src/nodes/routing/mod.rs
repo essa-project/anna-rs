@@ -36,6 +36,7 @@ pub fn run(
     zenoh: Arc<zenoh::Session>,
     zenoh_prefix: String,
     public_ip: Option<IpAddr>,
+    tcp_port_base: Option<u16>,
 ) -> eyre::Result<()> {
     let routing_thread_count = config.threads.routing;
     let node_id = format!("routing-{}", uuid::Uuid::new_v4());
@@ -65,6 +66,7 @@ pub fn run(
         routing_thread_count,
         default_local_replication: config.replication.local,
         public_ip,
+        tcp_port_base,
     });
 
     // start the initial worker threads based on `thread_num`
@@ -125,6 +127,7 @@ struct ConfigData {
     routing_thread_count: u32,
     default_local_replication: usize,
     public_ip: Option<IpAddr>,
+    tcp_port_base: Option<u16>,
 }
 
 /// Routing nodes are responsible for replying to
@@ -303,7 +306,17 @@ impl RoutingNode {
         let mut routing_ad_stream = routing_ad_subscriber.receiver().fuse();
 
         // create TCP listener
-        let tcp_listener = TcpListener::bind("127.0.0.1:0")
+        let listen_port = self
+            .config_data
+            .tcp_port_base
+            .map(|base| base + self.thread_id as u16)
+            .unwrap_or(0);
+        log::info!(
+            "Routing thread {} listening on port {}",
+            self.thread_id,
+            listen_port
+        );
+        let tcp_listener = TcpListener::bind(("127.0.0.1", listen_port))
             .await
             .context("failed to create TCP listener")?;
         let tcp_port = tcp_listener
@@ -471,6 +484,7 @@ fn router_test_instance(zenoh: Arc<zenoh::Session>, zenoh_prefix: String) -> Rou
         default_local_replication: 1,
         tier_metadata: Default::default(),
         public_ip: None,
+        tcp_port_base: None,
     };
     let node_id: String = "router_id".into();
     let mut router = RoutingNode::new(
