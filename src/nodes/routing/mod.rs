@@ -416,7 +416,7 @@ impl RoutingNode {
                 query = address_request_stream.select_next_some() => {
                     log::info!("handling address request for {}", query.selector());
                     let serialized_reply = self.seed_handler();
-                    query.reply_async(Sample::new(query.key_selector().to_owned() ,serialized_reply)).await;
+                    query.reply_async(Sample::new(query.key_selector().to_owned(), serialized_reply)).await;
                 }
                 sample = notify_stream.select_next_some() => {
                     let parsed = serde_json::from_str(&sample.value.as_string()?)
