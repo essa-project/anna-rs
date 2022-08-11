@@ -36,8 +36,19 @@ fn main() -> eyre::Result<()> {
         .map(|ip| ip.parse())
         .transpose()
         .context("failed to parse ANNA_PUBLIC_IP")?;
+    let tcp_port_base = std::env::var("ANNA_TCP_PORT_BASE")
+        .ok()
+        .map(|port| port.parse())
+        .transpose()
+        .context("failed to parse ANNA_TCP_PORT_BASE")?;
 
-    routing::run(&config, Arc::new(zenoh), zenoh_prefix.to_owned(), public_ip)
+    routing::run(
+        &config,
+        Arc::new(zenoh),
+        zenoh_prefix.to_owned(),
+        public_ip,
+        tcp_port_base,
+    )
 }
 
 fn set_up_logger() -> Result<(), fern::InitError> {

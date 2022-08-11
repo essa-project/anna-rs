@@ -43,7 +43,7 @@ fn get_set() {
         let zenoh = zenoh.clone();
         let zenoh_prefix = zenoh_prefix.clone();
         thread::spawn(move || {
-            routing::run(&config, zenoh, zenoh_prefix, None)
+            routing::run(&config, zenoh, zenoh_prefix, None, None)
                 .context("Routing task failed")
                 .unwrap()
         })

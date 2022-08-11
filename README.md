@@ -27,6 +27,14 @@ This project contains several executables:
 
 Each executable can be started by running the built executable from `target`. Alternatively, it's also possible to combine the build and run steps using `cargo run --bin <bin-name>`, where `<bin-name>` is the name of the executable. Since all nodes expect that an routing node is available, it is recommended to start the `routing` executable first.
 
+For `routing` and `kvs` executables, several environment variables can be set to control the behavior:
+
+- `routing`
+  - **`ANNA_PUBLIC_IP`**: The public IP address to listen on so that other nodes can connect TCP to this node. If not set, TCP mode won't be available.
+  - **`ANNA_TCP_PORT_BASE`**: The base of TCP ports to listen on. The real port used will be `ANNA_TCP_PORT_BASE + thread_id`. If not set, the ports will be allocated by system.
+- `kvs`
+  - **`ANNA_PUBLIC_IP`**: Same as for the `routing` executable.
+
 ### Config Files
 
 All executables (with the exception of the logger) expect the path to a config file as argument. An example for this config file can be found in [`example-config.yml`](example-config.yml).
