@@ -8,8 +8,9 @@ use crate::{
         LastWriterWinsLattice, Lattice, MapLattice, MaxLattice, SetLattice,
     },
     messages::{
-        request::RequestData, response::ResponseTuple, AddressRequest, AddressResponse, Request,
-        Response, TcpMessage,
+        request::{KeyOperation, PutTuple, RequestData},
+        response::ResponseTuple,
+        AddressRequest, AddressResponse, Request, Response, TcpMessage,
     },
     store::LatticeValue,
     topics::{ClientThread, KvsThread, RoutingThread},
@@ -295,8 +296,10 @@ impl ClientNode {
     ) -> eyre::Result<String> {
         let request_id = self.generate_request_id();
         let request = ClientRequest {
-            key,
-            put_value: Some(lattice),
+            operation: KeyOperation::Put(PutTuple {
+                key: Key::Client(key),
+                value: lattice,
+            }),
             response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
             request_id: request_id.clone(),
             address_cache_size: HashMap::new(),
@@ -322,8 +325,7 @@ impl ClientNode {
     pub async fn get_async(&mut self, key: ClientKey) -> eyre::Result<String> {
         let request_id = self.generate_request_id();
         let request = ClientRequest {
-            key,
-            put_value: None,
+            operation: KeyOperation::Get(Key::Client(key)),
             response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
             request_id: request_id.clone(),
             address_cache_size: HashMap::new(),
@@ -642,45 +644,46 @@ impl ClientNode {
     }
 
     async fn try_request(&mut self, mut request: ClientRequest) -> eyre::Result<()> {
-        let key = &request.key;
+        let key = request.operation.key();
+        if let Key::Client(key) = key {
+            // we only get NULL back for the worker thread if the query to the routing
+            // tier timed out, which should never happen.
+            let worker = match self
+                .get_worker_thread(key)
+                .await
+                .context("failed to get worker thread")?
+            {
+                Some(worker) => worker.clone(),
+                None => {
+                    // this means a key addr request is issued asynchronously
+                    if let Some((_, pending)) = self.pending_requests.get_mut(key) {
+                        pending.push(request.clone());
+                    } else {
+                        self.pending_requests
+                            .insert(key.clone(), (Instant::now(), vec![request.clone()]));
+                    }
 
-        // we only get NULL back for the worker thread if the query to the routing
-        // tier timed out, which should never happen.
-        let worker = match self
-            .get_worker_thread(key)
-            .await
-            .context("failed to get worker thread")?
-        {
-            Some(worker) => worker.clone(),
-            None => {
-                // this means a key addr request is issued asynchronously
-                if let Some((_, pending)) = self.pending_requests.get_mut(key) {
-                    pending.push(request);
-                } else {
-                    self.pending_requests
-                        .insert(key.clone(), (Instant::now(), vec![request]));
+                    return Ok(());
                 }
+            };
 
-                return Ok(());
-            }
-        };
+            request
+                .address_cache_size
+                .insert(key.clone(), self.key_address_cache[key].len());
 
-        request
-            .address_cache_size
-            .insert(key.clone(), self.key_address_cache[key].len());
+            self.send_request(&worker, &request.clone().into())
+                .await
+                .context("failed to send request")?;
 
-        self.send_request(&worker, &request.clone().into())
-            .await
-            .context("failed to send request")?;
-
-        self.pending_responses.insert(
-            request.request_id.clone(),
-            PendingRequest {
-                tp: Instant::now(),
-                node: worker,
-                request,
-            },
-        );
+            self.pending_responses.insert(
+                request.request_id.clone(),
+                PendingRequest {
+                    tp: Instant::now(),
+                    node: worker,
+                    request: request.clone(),
+                },
+            );
+        }
 
         Ok(())
     }

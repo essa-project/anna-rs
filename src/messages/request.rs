@@ -72,6 +72,14 @@ impl RequestData {
             RequestData::Put { .. } => ResponseType::Put,
         }
     }
+
+    /// Returns the keys for this request.
+    pub fn keys(&self) -> Vec<Key> {
+        match self {
+            RequestData::Get { keys } => keys.clone(),
+            RequestData::Put { tuples } => tuples.iter().map(|tuple| tuple.key.clone()).collect(),
+        }
+    }
 }
 
 /// Describes an assign operation on a specific key.
@@ -84,7 +92,7 @@ pub struct PutTuple {
 }
 
 /// Abstraction for a single key operation.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum KeyOperation {
     /// Get the value of a key.
     Get(Key),
