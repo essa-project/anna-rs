@@ -8,7 +8,7 @@ impl RoutingNode {
     /// Handles incoming replication change messages.
     ///
     /// Messages should be of type [`ReplicationFactorUpdate`].
-    pub async fn replication_change_handler(&mut self, serialized: &str) -> eyre::Result<()> {
+    pub async fn replication_change_handler(&mut self, serialized: &[u8]) -> eyre::Result<()> {
         log::info!("replication_change_puller");
 
         if self.thread_id == 0 {
@@ -26,7 +26,7 @@ impl RoutingNode {
             }
         }
 
-        let update: ReplicationFactorUpdate = serde_json::from_str(serialized)
+        let update: ReplicationFactorUpdate = rmp_serde::from_slice(serialized)
             .context("failed to parse replication factor update")?;
 
         for key_rep in &update.updates {
@@ -54,7 +54,7 @@ impl RoutingNode {
 
 #[cfg(test)]
 mod tests {
-    use zenoh::prelude::{Receiver, ZFuture};
+    use zenoh::prelude::{Receiver, SplitBuffer, ZFuture};
 
     use crate::{
         messages::{
@@ -62,7 +62,7 @@ mod tests {
             Tier,
         },
         nodes::routing::{router_test_instance, ConfigData},
-        zenoh_test_instance, ClientKey, ZenohValueAsString, ALL_TIERS,
+        zenoh_test_instance, ClientKey, ALL_TIERS,
     };
     use std::{sync::Arc, time::Duration};
 
@@ -113,7 +113,7 @@ mod tests {
             update.updates.push(rf);
         }
 
-        let serialized = serde_json::to_string(&update).unwrap();
+        let serialized = rmp_serde::to_vec(&update).unwrap();
 
         smol::block_on(router.replication_change_handler(&serialized)).unwrap();
 
@@ -121,12 +121,12 @@ mod tests {
             .receiver()
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
-        assert_eq!(message_1.value.as_string().unwrap(), serialized.as_str());
+        assert_eq!(message_1.value.payload.contiguous(), serialized.as_slice());
         let message_2 = subscriber
             .receiver()
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
-        assert_eq!(message_2.value.as_string().unwrap(), serialized.as_str());
+        assert_eq!(message_2.value.payload.contiguous(), serialized.as_slice());
 
         for key in keys {
             assert_eq!(

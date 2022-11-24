@@ -299,13 +299,13 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
                             }
                         }
 
-                        let serialized_latency = serde_json::to_string(&feedback)
+                        let serialized_latency = rmp_serde::to_vec(&feedback)
                             .context("failed to serialize UserFeedback")?;
 
                         zenoh
                             .put(
                                 &MonitoringThread::feedback_report_topic(zenoh_prefix),
-                                serialized_latency.as_str(),
+                                serialized_latency.as_slice(),
                             )
                             .wait()
                             .map_err(|e| eyre::eyre!(e))?;
@@ -333,12 +333,12 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
                 };
 
                 let serialized_latency =
-                    serde_json::to_string(&feedback).context("failed to serialize UserFeedback")?;
+                    rmp_serde::to_vec(&feedback).context("failed to serialize UserFeedback")?;
 
                 zenoh
                     .put(
                         &MonitoringThread::feedback_report_topic(zenoh_prefix),
-                        serialized_latency.as_str(),
+                        serialized_latency.as_slice(),
                     )
                     .wait()
                     .map_err(|e| eyre::eyre!(e))?;

@@ -7,11 +7,11 @@ use std::{collections::HashMap, time::Instant};
 
 impl KvsNode {
     /// Handles incoming gossip messages.
-    pub async fn gossip_handler(&mut self, serialized: &str) -> eyre::Result<()> {
+    pub async fn gossip_handler(&mut self, serialized: &[u8]) -> eyre::Result<()> {
         let work_start = Instant::now();
 
         let gossip: Request =
-            serde_json::from_str(serialized).context("failed to decode key request")?;
+            rmp_serde::from_slice(serialized).context("failed to decode key request")?;
         let mut gossip_map: HashMap<_, Vec<_>> = HashMap::new();
 
         let tuples = match gossip.request {
@@ -95,7 +95,7 @@ impl KvsNode {
                 address_cache_size: Default::default(),
             };
             let serialized =
-                serde_json::to_string(&key_request).context("failed to serialize KeyRequest")?;
+                rmp_serde::to_vec(&key_request).context("failed to serialize KeyRequest")?;
             self.zenoh
                 .put(&address, serialized)
                 .await
@@ -126,7 +126,7 @@ mod tests {
         lattice_value: LatticeValue,
         node_id: String,
         zenoh_prefix: &str,
-    ) -> String {
+    ) -> Vec<u8> {
         let request = Request {
             request: RequestData::Put {
                 tuples: vec![PutTuple {
@@ -143,7 +143,7 @@ mod tests {
             address_cache_size: Default::default(),
         };
 
-        serde_json::to_string(&request).expect("failed to serialize KeyRequest")
+        rmp_serde::to_vec(&request).expect("failed to serialize KeyRequest")
     }
 
     #[test]

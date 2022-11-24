@@ -151,8 +151,8 @@ impl KvsNode {
                         .await
                         .context("failed to send reply via TCP")?;
                 } else {
-                    let serialized_response = serde_json::to_string(&response)
-                        .context("failed to serialize key response")?;
+                    let serialized_response =
+                        rmp_serde::to_vec(&response).context("failed to serialize key response")?;
                     self.zenoh
                         .put(&response_addr, serialized_response)
                         .await
@@ -167,7 +167,7 @@ impl KvsNode {
 
 #[cfg(test)]
 mod tests {
-    use zenoh::prelude::{Receiver, ZFuture};
+    use zenoh::prelude::{Receiver, SplitBuffer, ZFuture};
 
     use crate::{
         lattice::{
@@ -182,7 +182,7 @@ mod tests {
         nodes::kvs::kvs_test_instance,
         store::LatticeValue,
         topics::ClientThread,
-        zenoh_test_instance, ClientKey, ZenohValueAsString,
+        zenoh_test_instance, ClientKey,
     };
 
     use std::{
@@ -268,7 +268,8 @@ mod tests {
             .recv_timeout(Duration::from_secs(5))
             .unwrap();
 
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -324,7 +325,8 @@ mod tests {
             .recv_timeout(Duration::from_secs(5))
             .unwrap();
 
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -387,7 +389,8 @@ mod tests {
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
 
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -455,7 +458,8 @@ mod tests {
             .receiver()
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -507,7 +511,8 @@ mod tests {
             .receiver()
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -535,7 +540,8 @@ mod tests {
             .receiver()
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -590,7 +596,8 @@ mod tests {
             .receiver()
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -618,7 +625,8 @@ mod tests {
             .receiver()
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -670,7 +678,8 @@ mod tests {
             .receiver()
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -698,7 +707,8 @@ mod tests {
             .receiver()
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -764,7 +774,8 @@ mod tests {
             .receiver()
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -792,7 +803,8 @@ mod tests {
             .receiver()
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);

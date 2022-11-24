@@ -208,7 +208,7 @@ impl HashRingUtil {
                 .context("failed to send key request via TCP")?;
         } else {
             let serialized =
-                serde_json::to_string(&key_request).context("failed to serialize KeyRequest")?;
+                rmp_serde::to_vec(&key_request).context("failed to serialize KeyRequest")?;
 
             zenoh
                 .put(&target_address, serialized)

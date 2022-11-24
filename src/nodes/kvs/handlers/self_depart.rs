@@ -9,9 +9,9 @@ use std::collections::{HashMap, HashSet};
 
 impl KvsNode {
     /// Handles incoming self depart messages.
-    pub async fn self_depart_handler(&mut self, serialized: &str) -> eyre::Result<()> {
+    pub async fn self_depart_handler(&mut self, serialized: &[u8]) -> eyre::Result<()> {
         let self_depart: SelfDepart =
-            serde_json::from_str(serialized).context("failed to deserialize ResponseTopic")?;
+            rmp_serde::from_slice(serialized).context("failed to deserialize ResponseTopic")?;
         let ack_topic = self_depart.response_topic;
 
         log::info!("This node is departing.");
@@ -34,7 +34,7 @@ impl KvsNode {
                         .put(
                             &KvsThread::new(node_id.clone(), 0)
                                 .node_depart_topic(&self.zenoh_prefix),
-                            serde_json::to_string(&depart_message)
+                            rmp_serde::to_vec(&depart_message)
                                 .context("failed to serialize depart message")?,
                         )
                         .await
@@ -42,7 +42,7 @@ impl KvsNode {
                 }
             }
 
-            let notify_message = serde_json::to_string(&messages::Notify::Depart(depart_message))
+            let notify_message = rmp_serde::to_vec(&messages::Notify::Depart(depart_message))
                 .context("failed to serialize notify message")?;
 
             // notify all routing nodes
@@ -50,7 +50,7 @@ impl KvsNode {
                 self.zenoh
                     .put(
                         &RoutingThread::new(node_id.clone(), 0).notify_topic(&self.zenoh_prefix),
-                        notify_message.as_str(),
+                        notify_message.as_slice(),
                     )
                     .await
                     .map_err(|e| eyre::eyre!(e))?;
@@ -60,7 +60,7 @@ impl KvsNode {
             self.zenoh
                 .put(
                     &MonitoringThread::notify_topic(&self.zenoh_prefix),
-                    notify_message.as_str(),
+                    notify_message,
                 )
                 .await
                 .map_err(|e| eyre::eyre!(e))?;
@@ -114,7 +114,7 @@ impl KvsNode {
         self.zenoh
             .put(
                 &ack_topic,
-                serde_json::to_string(&Departed {
+                rmp_serde::to_vec(&Departed {
                     tier: self.config_data.self_tier,
                     node_id: self.node_id.clone(),
                 })?,
@@ -129,12 +129,12 @@ impl KvsNode {
 
 #[cfg(test)]
 mod tests {
-    use zenoh::prelude::{Receiver, ZFuture};
+    use zenoh::prelude::{Receiver, SplitBuffer, ZFuture};
 
     use crate::{
         messages::{Departed, SelfDepart, Tier},
         nodes::kvs::kvs_test_instance,
-        zenoh_test_instance, ZenohValueAsString,
+        zenoh_test_instance,
     };
     use std::time::Duration;
 
@@ -154,7 +154,7 @@ mod tests {
             server.global_hash_rings[&Tier::Memory].unique_nodes().len(),
             1
         );
-        let serialized = serde_json::to_string(&self_depart).unwrap();
+        let serialized = rmp_serde::to_vec(&self_depart).unwrap();
         smol::block_on(server.self_depart_handler(&serialized)).unwrap();
 
         let message = subscriber
@@ -173,7 +173,7 @@ mod tests {
             self_depart.response_topic
         );
         let depart_msg: Departed =
-            serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
         assert_eq!(
             depart_msg,
             Departed {

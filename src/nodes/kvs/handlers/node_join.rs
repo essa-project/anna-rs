@@ -7,8 +7,7 @@ impl KvsNode {
     pub async fn node_join_handler(&mut self, message: messages::Join) -> eyre::Result<()> {
         let work_start = Instant::now();
 
-        let serialized =
-            serde_json::to_string(&message).context("failed to serialize Join message")?;
+        let serialized = rmp_serde::to_vec(&message).context("failed to serialize Join message")?;
         let messages::Join {
             tier,
             node_id: new_server_node_id,
@@ -34,7 +33,7 @@ impl KvsNode {
             // and it communicates that information to non-0 threads on its own machine
             if self.thread_id == 0 {
                 // send my ID to the new server node
-                let msg = serde_json::to_string(&messages::Join {
+                let msg = rmp_serde::to_vec(&messages::Join {
                     tier: self.config_data.self_tier,
                     node_id: self.node_id.clone(),
                     join_count: self.self_join_count,
@@ -45,7 +44,7 @@ impl KvsNode {
                     .put(
                         &KvsThread::new(new_server_node_id.to_owned(), 0)
                             .node_join_topic(&self.zenoh_prefix),
-                        msg.as_str(),
+                        msg,
                     )
                     .await
                     .map_err(|e| eyre::eyre!(e))
@@ -60,7 +59,7 @@ impl KvsNode {
                             self.zenoh
                                 .put(
                                     &KvsThread::new(node_id.clone(), 0).node_join_topic(&self.zenoh_prefix),
-                                    serialized.as_str(),
+                                    serialized.as_slice(),
                                 )
                                 .await
                                 .map_err(|e| eyre::eyre!(e))
@@ -83,7 +82,7 @@ impl KvsNode {
                         .put(
                             &KvsThread::new(self.node_id.clone(), tid)
                                 .node_join_topic(&self.zenoh_prefix),
-                            serialized.as_str(),
+                            serialized.as_slice(),
                         )
                         .await
                         .map_err(|e| eyre::eyre!(e))
@@ -160,12 +159,12 @@ impl KvsNode {
 
 #[cfg(test)]
 mod tests {
-    use zenoh::prelude::{Receiver, ZFuture};
+    use zenoh::prelude::{Receiver, SplitBuffer, ZFuture};
 
     use crate::{
         messages::{self, Tier},
         nodes::kvs::kvs_test_instance,
-        zenoh_test_instance, ZenohValueAsString,
+        zenoh_test_instance,
     };
     use std::time::Duration;
 
@@ -201,7 +200,7 @@ mod tests {
                 .receiver()
                 .recv_timeout(Duration::from_secs(5))
                 .unwrap();
-            serde_json::from_str(&raw.value.as_string().unwrap()).unwrap()
+            rmp_serde::from_slice(&raw.value.payload.contiguous()).unwrap()
         };
         assert_eq!(
             message_1,
@@ -216,7 +215,7 @@ mod tests {
             .recv_timeout(Duration::from_secs(5))
             .unwrap();
         let message_2_parsed: messages::Join =
-            serde_json::from_str(&message_2.value.as_string().unwrap()).unwrap();
+            rmp_serde::from_slice(&message_2.value.payload.contiguous()).unwrap();
         assert_eq!(message_2_parsed, message);
 
         assert_eq!(server.global_hash_rings[&Tier::Memory].len(), 6000);

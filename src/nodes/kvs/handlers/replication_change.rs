@@ -11,7 +11,7 @@ use std::{
 
 impl KvsNode {
     /// Handles incoming replication change messages.
-    pub async fn replication_change_handler(&mut self, serialized: &str) -> eyre::Result<()> {
+    pub async fn replication_change_handler(&mut self, serialized: &[u8]) -> eyre::Result<()> {
         let work_start = Instant::now();
 
         log::info!("Received a replication factor change.");
@@ -29,7 +29,7 @@ impl KvsNode {
             }
         }
 
-        let rep_change: ReplicationFactorUpdate = serde_json::from_str(serialized)
+        let rep_change: ReplicationFactorUpdate = rmp_serde::from_slice(serialized)
             .context("failed to deserialize ReplicationFactorUpdate")?;
 
         let mut addr_keyset_map: HashMap<String, HashSet<Key>> = HashMap::new();

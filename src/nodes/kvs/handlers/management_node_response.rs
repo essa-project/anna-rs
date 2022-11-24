@@ -10,12 +10,15 @@ use std::{collections::HashMap, mem, time::Instant};
 
 impl KvsNode {
     /// Handles incoming management node responses.
-    pub async fn management_node_response_handler(&mut self, serialized: &str) -> eyre::Result<()> {
+    pub async fn management_node_response_handler(
+        &mut self,
+        serialized: &[u8],
+    ) -> eyre::Result<()> {
         let work_start = Instant::now();
 
         // Get the response.
         let func_nodes: NodeSet =
-            serde_json::from_str(serialized).context("failed to deserialize StringSet")?;
+            rmp_serde::from_slice(serialized).context("failed to deserialize StringSet")?;
 
         // Update extant_caches with the response.
         let mut deleted_caches = mem::take(&mut self.extant_caches);
@@ -80,7 +83,7 @@ impl KvsNode {
         // Loop over the address request map and execute all the requests.
         for (address, request) in addr_request_map {
             let serialized_req =
-                serde_json::to_string(&request).context("failed to serialize KeyRequest")?;
+                rmp_serde::to_vec(&request).context("failed to serialize KeyRequest")?;
             self.zenoh
                 .put(&address, serialized_req)
                 .await

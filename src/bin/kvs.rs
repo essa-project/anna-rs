@@ -51,7 +51,7 @@ fn set_up_logger() -> Result<(), fern::InitError> {
                 message
             ))
         })
-        .level(log::LevelFilter::Info)
+        .level(log::LevelFilter::Warn)
         .chain(std::io::stdout())
         .chain(fern::log_file("kvs.log")?)
         .apply()?;

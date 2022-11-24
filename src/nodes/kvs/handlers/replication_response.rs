@@ -40,7 +40,7 @@ impl KvsNode {
                     .as_lww()?;
 
                 let rep_data: ReplicationFactor =
-                    serde_json::from_slice(lww_value.reveal().value().as_slice())
+                    rmp_serde::from_slice(lww_value.reveal().value().as_slice())
                         .context("failed to decode replication factor")?;
 
                 for global in &rep_data.global {
@@ -154,7 +154,7 @@ impl KvsNode {
                                 .await
                                 .context("failed to send reply via TCP")?;
                         } else {
-                            let serialized_response = serde_json::to_string(&response)
+                            let serialized_response = rmp_serde::to_vec(&response)
                                 .context("failed to serialize key response")?;
                             self.zenoh
                                 .put(request_addr, serialized_response)
@@ -233,7 +233,7 @@ impl KvsNode {
                             request_id: Default::default(),
                             address_cache_size: Default::default(),
                         };
-                        let serialized = serde_json::to_string(&key_request)
+                        let serialized = rmp_serde::to_vec(&key_request)
                             .map_err(|e| eyre::eyre!(e))
                             .context("failed to serialize KeyRequest")?;
                         self.zenoh

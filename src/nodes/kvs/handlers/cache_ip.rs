@@ -7,12 +7,12 @@ use std::{collections::HashSet, time::Instant};
 
 impl KvsNode {
     /// Handles incoming cache_ip messages.
-    pub async fn cache_ip_handler(&mut self, serialized: &str) -> eyre::Result<()> {
+    pub async fn cache_ip_handler(&mut self, serialized: &[u8]) -> eyre::Result<()> {
         let work_start = Instant::now();
 
         // The response will be a list of cache IPs and their responsible keys.
         let response: Response =
-            serde_json::from_str(serialized).context("failed to deserialize KeyResponse")?;
+            rmp_serde::from_slice(serialized).context("failed to deserialize KeyResponse")?;
 
         for tuple in response.tuples {
             // tuple is a key-value pair from the KVS;
@@ -34,7 +34,7 @@ impl KvsNode {
                     .as_lww()?;
 
                 let key_set: HashSet<ClientKey> =
-                    serde_json::from_slice(lww_value.reveal().value().as_slice())
+                    rmp_serde::from_slice(lww_value.reveal().value().as_slice())
                         .context("failed to deserialize StringSet")?;
 
                 // First, update key_to_cache_ips with dropped keys for this cache.

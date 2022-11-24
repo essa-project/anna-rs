@@ -101,6 +101,7 @@ impl KvsNode {
 
     /// Sends out gossip messages to relevant nodes and threads.
     async fn send_out_gossip(&mut self) -> eyre::Result<()> {
+        self.gossip_epoch += 1;
         let work_start = Instant::now();
 
         let mut addr_keyset_map: HashMap<String, HashSet<Key>> = HashMap::new();
@@ -188,7 +189,7 @@ impl KvsNode {
             if !threads.is_empty() {
                 let target = threads.choose(&mut thread_rng()).unwrap();
                 let target_address = target.request_topic(&self.zenoh_prefix);
-                let serialized = serde_json::to_string(&message)
+                let serialized = rmp_serde::to_vec(&message)
                     .context("failed to serialize report Request message")?;
                 self.zenoh
                     .put(&target_address, serialized)
@@ -227,8 +228,7 @@ impl KvsNode {
 
         // send gossip
         for (addr, msg) in gossip_map {
-            let serialized =
-                serde_json::to_string(&msg).context("failed to serialize KeyRequest")?;
+            let serialized = rmp_serde::to_vec(&msg).context("failed to serialize KeyRequest")?;
             self.zenoh
                 .put(&addr.clone(), serialized)
                 .await

@@ -23,7 +23,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use zenoh::prelude::{Sample, ZFuture};
+use zenoh::prelude::{Sample, SplitBuffer, ZFuture};
 
 mod handlers;
 
@@ -197,8 +197,7 @@ impl RoutingNode {
             self.zenoh
                 .put(
                     &MonitoringThread::notify_topic(&self.zenoh_prefix),
-                    serde_json::to_string(&message)
-                        .context("failed to serialize notify message")?,
+                    rmp_serde::to_vec(&message).context("failed to serialize notify message")?,
                 )
                 .await
                 .map_err(|e| eyre::eyre!(e))
@@ -221,7 +220,7 @@ impl RoutingNode {
                         zenoh
                             .put(
                                 &RoutingThread::advertisement_topic(&zenoh_prefix),
-                                serde_json::to_string(&message)
+                                rmp_serde::to_vec(&message)
                                     .context("failed to serialize notify message")?,
                             )
                             .await
@@ -328,7 +327,7 @@ impl RoutingNode {
             .public_ip
             .map(|ip| SocketAddr::new(ip, tcp_port));
         let tcp_addr_serialized =
-            serde_json::to_string(&tcp_addr).context("failed to serialize tcp address")?;
+            rmp_serde::to_vec(&tcp_addr).context("failed to serialize tcp address")?;
         let mut tcp_incoming = tcp_listener.incoming().fuse();
 
         let (new_connections_tx, mut new_connections) = channel::bounded(10);
@@ -424,7 +423,7 @@ impl RoutingNode {
                 }
 
                 query = tcp_addr_request_stream.select_next_some() => {
-                    query.reply_async(Sample::new(query.key_selector().to_owned(), tcp_addr_serialized.as_str())).await;
+                    query.reply_async(Sample::new(query.key_selector().to_owned(), tcp_addr_serialized.to_owned())).await;
                 }
                 query = address_request_stream.select_next_some() => {
                     log::info!("handling address request for {}", query.selector());
@@ -432,31 +431,31 @@ impl RoutingNode {
                     query.reply_async(Sample::new(query.key_selector().to_owned(), serialized_reply)).await;
                 }
                 sample = notify_stream.select_next_some() => {
-                    let parsed = serde_json::from_str(&sample.value.as_string()?)
+                    let parsed = rmp_serde::from_slice(&sample.value.payload.contiguous())
                         .context("failed to deserialize Notify message")?;
                     self.membership_handler(&parsed).await.context("membership handler failed")?;
                 }
                 sample = replication_response_stream.select_next_some() => {
                     log::info!("received replication response");
-                    let parsed = serde_json::from_str(&sample.value.as_string()?)
+                    let parsed = rmp_serde::from_slice(&sample.value.payload.contiguous())
                         .context("failed to deserialize Response message")?;
                     self.replication_response_handler(parsed).await
                         .context("replication response handler failed")?;
                 }
                 sample = replication_change_stream.select_next_some() => {
-                    self.replication_change_handler(&sample.value.as_string()?).await
+                    self.replication_change_handler(&sample.value.payload.contiguous()).await
                         .context("replication change handler failed")?;
                 }
                 sample = key_address_stream.select_next_some() => {
-                    let parsed = serde_json::from_str(&sample.value.as_string()?)
+                    let parsed = rmp_serde::from_slice(&sample.value.payload.contiguous())
                         .context("failed to deserialize AddressRequest message")?;
                     self.address_handler(parsed, None).await
                         .context("address handler failed")?;
                 },
-                sample = routing_ad_stream.select_next_some() => {
+                sample = routing_ad_stream.select_next_some() =>  {
                     let messages::RoutingNodeAdvertisement { node_id } =
-                        serde_json::from_str(&sample.value.as_string()?)
-                        .context("failed to deserialize RoutingNodeAdvertisement message")?;
+                        rmp_serde::from_slice(&sample.value.payload.contiguous())
+                            .context("failed to deserialize RoutingNodeAdvertisement message")?;
                     self.known_routing_nodes.insert(node_id);
                 },
                 () = shutdown_signal => break,

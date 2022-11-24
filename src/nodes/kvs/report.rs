@@ -121,7 +121,7 @@ impl ReportData {
                         node_id: management_id.clone(),
                     }
                     .query_func_nodes_topic(zenoh_prefix),
-                    serde_json::to_string(&FuncNodesQuery {
+                    rmp_serde::to_vec(&FuncNodesQuery {
                         response_topic: wt.management_node_response_topic(zenoh_prefix).to_string(),
                     })?,
                 )
@@ -170,7 +170,7 @@ impl ReportData {
             access_count: self.access_count,
         };
         let serialized_stat =
-            serde_json::to_vec(&stat).context("failed to serialize ServerThreadStatistics")?;
+            rmp_serde::to_vec(&stat).context("failed to serialize ServerThreadStatistics")?;
         let stat_req = Request {
             request: RequestData::Put {
                 tuples: vec![PutTuple {
@@ -218,7 +218,7 @@ impl ReportData {
             kind: KvsMetadataKind::KeyAccess,
         };
         let serialized_access =
-            serde_json::to_vec(&access).context("failed to serialize KeyAccessData")?;
+            rmp_serde::to_vec(&access).context("failed to serialize KeyAccessData")?;
         let access_req = Request {
             request: RequestData::Put {
                 tuples: vec![PutTuple {
@@ -252,7 +252,7 @@ impl ReportData {
             kind: KvsMetadataKind::KeySize,
         };
         let serialized_size =
-            serde_json::to_vec(&primary_key_size).context("failed to serialize KeySizeData")?;
+            rmp_serde::to_vec(&primary_key_size).context("failed to serialize KeySizeData")?;
         let size_req = Request {
             request: RequestData::Put {
                 tuples: vec![PutTuple {

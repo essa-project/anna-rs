@@ -36,7 +36,7 @@ impl RoutingNode {
                     .as_lww()?;
 
                 let rep_data: ReplicationFactor =
-                    serde_json::from_slice(lww_value.reveal().value().as_slice())
+                    rmp_serde::from_slice(lww_value.reveal().value().as_slice())
                         .context("failed to deserialize ReplicationFactor")?;
 
                 for global in &rep_data.global {
@@ -139,7 +139,7 @@ impl RoutingNode {
                         .await
                         .context("failed to send reply via TCP")?;
                 } else {
-                    let serialized = serde_json::to_string(&key_res)
+                    let serialized = rmp_serde::to_vec(&key_res)
                         .context("failed to serialize KeyAddressResponse")?;
                     self.zenoh
                         .put(&pending_key_req.reply_path.clone(), serialized)
@@ -225,7 +225,7 @@ mod tests {
             rf.local.push(rep_local);
         }
 
-        let repfactor = serde_json::to_vec(&rf).expect("failed to serialize ReplicationFactor");
+        let repfactor = rmp_serde::to_vec(&rf).expect("failed to serialize ReplicationFactor");
 
         tp.lattice = Some(LatticeValue::Lww(LastWriterWinsLattice::from_pair(
             Timestamp::now(),

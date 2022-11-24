@@ -11,7 +11,7 @@ use crate::{
     metadata::TierMetadata,
     store::{LatticeValue, LatticeValueStore},
     topics::{KvsThread, MonitoringThread, RoutingThread},
-    ClientKey, Key, ZenohValueAsString,
+    ClientKey, Key,
 };
 use eyre::{bail, eyre, Context};
 use futures::{
@@ -27,6 +27,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use zenoh::prelude::SplitBuffer;
 
 use super::{receive_tcp_message, request_cluster_info, send_tcp_message};
 
@@ -196,6 +197,9 @@ pub struct KvsNode {
     /// Set to the current time after gossip was sent out.
     gossip_start: Instant,
 
+    /// Use as VectorClock of kvs.
+    gossip_epoch: usize,
+
     /// A monotonically increasing integer used for creating request IDs.
     request_id: u32,
 
@@ -294,6 +298,7 @@ impl KvsNode {
             zenoh,
             zenoh_prefix,
             gossip_start: Instant::now(),
+            gossip_epoch: 0,
             report_data: ReportData::new(management_id),
             request_id: 0,
             kvs: Default::default(),
@@ -376,7 +381,7 @@ impl KvsNode {
                             .put(
                                 &KvsThread::new(node_id.clone(), 0)
                                     .node_join_topic(&self.zenoh_prefix),
-                                serde_json::to_string(&join_msg)
+                                rmp_serde::to_vec(&join_msg)
                                     .context("failed to serialize join message")?,
                             )
                             .await
@@ -386,7 +391,7 @@ impl KvsNode {
                 }
             }
 
-            let notify_msg = serde_json::to_string(&messages::Notify::Join(join_msg))
+            let notify_msg = rmp_serde::to_vec(&messages::Notify::Join(join_msg))
                 .context("failed to serialize notify message")?;
 
             // notify proxies that this node has joined
@@ -394,7 +399,7 @@ impl KvsNode {
                 self.zenoh
                     .put(
                         &RoutingThread::new(node_id.clone(), 0).notify_topic(&self.zenoh_prefix),
-                        notify_msg.as_str(),
+                        notify_msg.as_slice(),
                     )
                     .await
                     .map_err(|e| eyre!(e))
@@ -405,7 +410,7 @@ impl KvsNode {
             self.zenoh
                 .put(
                     &MonitoringThread::notify_topic(&self.zenoh_prefix),
-                    notify_msg.as_str(),
+                    notify_msg.as_slice(),
                 )
                 .await
                 .map_err(|e| eyre!(e))
@@ -535,51 +540,51 @@ impl KvsNode {
                     self.node_connections.insert(self.wt.clone(), self_connection);
                 }
                 sample = join_stream.select_next_some() => {
-                    let message = serde_json::from_str(&sample.value.as_string()?)
+                    let message = rmp_serde::from_slice(&sample.value.payload.contiguous())
                         .context("failed to deserialize join message")?;
                     self.node_join_handler(message).await.context("failed to handle join")?;
                     self.gossip_updates().await.context("failed to gossip updates")?;
                 },
                 sample = depart_stream.select_next_some() => {
-                    let message = serde_json::from_str(&sample.value.as_string()?)
+                    let message = rmp_serde::from_slice(&sample.value.payload.contiguous())
                         .context("failed to deserialize join message")?;
                     self.node_depart_handler(message).await.context("failed to handle depart")?;
                     self.gossip_updates().await.context("failed to gossip updates")?;
                 },
                 sample = self_depart_stream.select_next_some() => {
-                    self.self_depart_handler(&sample.value.as_string()?)
+                    self.self_depart_handler(&sample.value.payload.contiguous())
                         .await.context("failed to handle self depart")?;
                 },
                 sample = request_stream.select_next_some() => {
-                    let message = serde_json::from_str(&sample.value.as_string()?)
+                    let message = rmp_serde::from_slice(&sample.value.payload.contiguous())
                         .context("failed to deserialize join message")?;
                     self.request_handler(message, None).await.context("failed to handle request")?;
                     self.gossip_updates().await.context("failed to gossip updates")?;
                 },
                 sample = gossip_stream.select_next_some() =>  {
-                    self.gossip_handler(&sample.value.as_string()?)
+                    self.gossip_handler(&sample.value.payload.contiguous())
                         .await.context("failed to handle gossip")?;
                     self.gossip_updates().await.context("failed to gossip updates")?;
                 },
                 sample = replication_response_stream.select_next_some() => {
-                    let message = serde_json::from_str(&sample.value.as_string()?)
+                    let message = rmp_serde::from_slice(&sample.value.payload.contiguous())
                         .context("failed to deserialize join message")?;
                     self.replication_response_handler(message)
                         .await.context("failed to handle replication_response")?;
                     self.gossip_updates().await.context("failed to gossip updates")?;
                 },
                 sample = replication_change_stream.select_next_some() => {
-                    self.replication_change_handler(&sample.value.as_string()?)
+                    self.replication_change_handler(&sample.value.payload.contiguous())
                         .await.context("failed to handle replication_change")?;
                     self.gossip_updates().await.context("failed to gossip updates")?;
                 },
                 sample = cache_ip_stream.select_next_some() => {
-                    self.cache_ip_handler(&sample.value.as_string()?)
+                    self.cache_ip_handler(&sample.value.payload.contiguous())
                         .await.context("failed to handle cache_ip")?;
                     self.gossip_updates().await.context("failed to gossip updates")?;
                 },
                 sample = management_node_response_stream.select_next_some() => {
-                    self.management_node_response_handler(&sample.value.as_string()?)
+                    self.management_node_response_handler(&sample.value.payload.contiguous())
                         .await.context("failed to handle management_node_response")?;
                     self.gossip_updates().await.context("failed to gossip updates")?;
                 },
@@ -620,7 +625,7 @@ impl KvsNode {
                     }
                 };
                 let parsed: Option<smol::net::SocketAddr> =
-                    serde_json::from_str(&reply.as_string()?)
+                    rmp_serde::from_slice(&reply.payload.contiguous())
                         .context("failed to deserialize tcp addr reply")?;
                 let connection = match parsed {
                     Some(addr) => {

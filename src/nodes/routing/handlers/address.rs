@@ -113,7 +113,7 @@ impl RoutingNode {
                 .await
                 .context("failed to send reply via TCP")?;
             } else {
-                let serialized_reply = serde_json::to_string(&addr_response)
+                let serialized_reply = rmp_serde::to_vec(&addr_response)
                     .context("failed to serialize KeyAddressResponse")?;
                 self.zenoh
                     .put(&addr_request.response_address, serialized_reply)
@@ -130,13 +130,13 @@ impl RoutingNode {
 
 #[cfg(test)]
 mod tests {
-    use zenoh::prelude::{Receiver, ZFuture};
+    use zenoh::prelude::{Receiver, SplitBuffer, ZFuture};
 
     use crate::{
         messages::{AddressRequest, AddressResponse, Tier},
         nodes::routing::router_test_instance,
         topics::KvsThread,
-        zenoh_test_instance, ZenohValueAsString,
+        zenoh_test_instance,
     };
     use std::time::Duration;
 
@@ -169,7 +169,7 @@ mod tests {
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
         let resp: AddressResponse =
-            serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(resp.response_id, "1");
         assert_eq!(resp.error, None);

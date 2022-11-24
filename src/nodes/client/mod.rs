@@ -14,7 +14,7 @@ use crate::{
     },
     store::LatticeValue,
     topics::{ClientThread, KvsThread, RoutingThread},
-    AnnaError, ClientKey, Key, ZenohValueAsString,
+    AnnaError, ClientKey, Key,
 };
 use client_request::{ClientRequest, PendingRequest};
 use eyre::{anyhow, bail, eyre, Context, ContextCompat};
@@ -31,6 +31,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use zenoh::prelude::SplitBuffer;
 
 use super::{receive_tcp_message, send_tcp_message};
 
@@ -198,9 +199,10 @@ impl ClientNode {
                         }
                     }
                 };
-                let parsed: Option<smol::net::SocketAddr> =
-                    serde_json::from_str(&reply.as_string()?)
-                        .context("failed to deserialize tcp addr reply")?;
+
+                let reply_buf = reply.payload.contiguous();
+                let parsed: Option<smol::net::SocketAddr> = rmp_serde::from_slice(&reply_buf)
+                    .context("failed to deserialize tcp addr reply")?;
                 let connection = match parsed {
                     Some(addr) => {
                         let connection = TcpStream::connect(addr)
@@ -348,6 +350,7 @@ impl ClientNode {
     pub async fn receive_async(&mut self) -> eyre::Result<Vec<Response>> {
         let mut results = Vec::new();
         let mut timeout = futures_timer::Delay::new(Duration::from_secs(3)).fuse();
+
         futures::select! {
             message = self.incoming_tcp_messages.select_next_some() => {
                 self.handle_tcp_message(message?, &mut results).await?;
@@ -356,16 +359,17 @@ impl ClientNode {
                 self.handle_tcp_message(message?, &mut results).await?;
             }
             sample = self.address_responses.select_next_some() => {
-                let serialized = sample.value.as_string()?;
-                let response: AddressResponse = serde_json::from_str(&serialized)
+                let serialized = sample.value.payload.contiguous();
+
+                let response: AddressResponse = rmp_serde::from_slice(&serialized)
                     .context("failed to deserialize KeyAddressResponse")?;
 
                 self.handle_address_response(response).await?;
             },
             sample = self.responses.select_next_some() => {
-                let serialized = sample.value.as_string()?;
+                let serialized = sample.value.payload.contiguous();
                 let response: Response =
-                    serde_json::from_str(&serialized).context("failed to deserialize KeyResponse")?;
+                    rmp_serde::from_slice(&serialized).context("failed to deserialize KeyResponse")?;
                 results.extend(self.handle_response(response).await?);
             },
             task_result = self.receive_tasks.select_next_some() => {
@@ -728,7 +732,7 @@ impl ClientNode {
             self.zenoh
                 .put(
                     &target.request_topic(&self.zenoh_prefix),
-                    serde_json::to_string(request).context("failed to serialize Request")?,
+                    rmp_serde::to_vec(request).context("failed to serialize Request")?,
                 )
                 .await
                 .map_err(|e| eyre!(e))
@@ -765,7 +769,7 @@ impl ClientNode {
             send_tcp_message(&TcpMessage::AddressRequest(request), connection).await?;
         } else {
             let serialized =
-                serde_json::to_string(&request).context("failed to serialize KeyAddressRequest")?;
+                rmp_serde::to_vec(&request).context("failed to serialize KeyAddressRequest")?;
             self.zenoh
                 .put(
                     &rt_thread.address_request_topic(&self.zenoh_prefix),

@@ -76,7 +76,7 @@ impl<'a> MonitoringNode<'a> {
         let mut expected_response_ids = HashSet::new();
         for (address, request) in addr_request_map {
             let serialized_req =
-                serde_json::to_string(&request).context("failed to serialize KeyRequest")?;
+                rmp_serde::to_vec(&request).context("failed to serialize KeyRequest")?;
             self.zenoh
                 .put(&address, serialized_req)
                 .await
@@ -122,7 +122,7 @@ impl<'a> MonitoringNode<'a> {
                     kind,
                 } => match kind {
                     KvsMetadataKind::ServerStats => {
-                        let stat: ServerThreadStatistics = serde_json::from_slice(value.value())
+                        let stat: ServerThreadStatistics = rmp_serde::from_slice(value.value())
                             .context("failed to deserialize ServerThreadStatistics")?;
 
                         match tier {
@@ -158,7 +158,7 @@ impl<'a> MonitoringNode<'a> {
                         }
                     }
                     KvsMetadataKind::KeyAccess => {
-                        let access: KeyAccessData = serde_json::from_slice(value.value())
+                        let access: KeyAccessData = rmp_serde::from_slice(value.value())
                             .context("failed to deserialize KeyAccessData")?;
 
                         for key_count in access.keys {
@@ -170,7 +170,7 @@ impl<'a> MonitoringNode<'a> {
                         }
                     }
                     KvsMetadataKind::KeySize => {
-                        let key_size_msg: KeySizeData = serde_json::from_slice(value.value())
+                        let key_size_msg: KeySizeData = rmp_serde::from_slice(value.value())
                             .context("failed to deserialize KeySizeData")?;
 
                         for key_size_tuple in key_size_msg.key_sizes {

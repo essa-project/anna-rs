@@ -17,7 +17,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use zenoh::prelude::{Receiver, ZFuture};
+use zenoh::prelude::{Receiver, SplitBuffer, ZFuture};
 
 #[derive(FromArgs)]
 /// Rusty anna client
@@ -66,8 +66,9 @@ fn main() -> eyre::Result<()> {
                 .context("failed to query tcp address of routing thread")?;
             receiver.recv()?
         };
-        let parsed: smol::net::SocketAddr = serde_json::from_str(&reply.sample.value.as_string()?)
-            .context("failed to deserialize tcp addr reply")?;
+        let parsed: smol::net::SocketAddr =
+            rmp_serde::from_slice(&reply.sample.value.payload.contiguous())
+                .context("failed to deserialize tcp addr reply")?;
 
         parsed
     };
