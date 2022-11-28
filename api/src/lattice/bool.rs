@@ -40,6 +40,10 @@ impl Lattice for BoolLattice {
         &self.element
     }
 
+    fn reveal_mut(&mut self) -> &mut bool {
+        &mut self.element
+    }
+
     fn into_revealed(self) -> bool {
         self.element
     }

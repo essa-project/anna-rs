@@ -58,6 +58,10 @@ impl<T: Ord + Clone> Lattice for MaxLattice<T> {
         &self.element
     }
 
+    fn reveal_mut(&mut self) -> &mut T {
+        &mut self.element
+    }
+
     fn into_revealed(self) -> T {
         self.element
     }

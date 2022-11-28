@@ -59,6 +59,9 @@ pub trait Lattice {
     /// Returns the current value stored in the lattice.
     fn reveal(&self) -> &Self::Element;
 
+    /// Returns the current value stored in the lattice.
+    fn reveal_mut(&mut self) -> &mut Self::Element;
+
     /// Returns the current value stored in the lattice, taking ownership.
     fn into_revealed(self) -> Self::Element;
 

@@ -73,6 +73,10 @@ where
         &self.element
     }
 
+    fn reveal_mut(&mut self) -> &mut TimestampValuePair<T> {
+        &mut self.element
+    }
+
     fn into_revealed(self) -> TimestampValuePair<T> {
         self.element
     }

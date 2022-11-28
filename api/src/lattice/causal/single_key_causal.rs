@@ -30,6 +30,10 @@ where
         &self.element
     }
 
+    fn reveal_mut(&mut self) -> &mut VectorClockValuePair<T> {
+        &mut self.element
+    }
+
     fn into_revealed(self) -> VectorClockValuePair<T> {
         self.element
     }

@@ -63,6 +63,10 @@ where
         &self.element
     }
 
+    fn reveal_mut(&mut self) -> &mut HashMap<K, V> {
+        &mut self.element
+    }
+
     fn into_revealed(self) -> HashMap<K, V> {
         self.element
     }

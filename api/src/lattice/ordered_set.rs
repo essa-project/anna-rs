@@ -69,6 +69,10 @@ where
         &self.element
     }
 
+    fn reveal_mut(&mut self) -> &mut BTreeSet<T> {
+        &mut self.element
+    }
+
     fn into_revealed(self) -> BTreeSet<T> {
         self.element
     }

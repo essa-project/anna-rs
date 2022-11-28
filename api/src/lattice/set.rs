@@ -60,6 +60,10 @@ where
         &self.element
     }
 
+    fn reveal_mut(&mut self) -> &mut HashSet<T> {
+        &mut self.element
+    }
+
     fn into_revealed(self) -> HashSet<T> {
         self.element
     }
