@@ -313,6 +313,36 @@ impl ClientNode {
         Ok(request_id)
     }
 
+    /// Starts a request to add the given [`SetLattice<Vec<u8>>`] to the given key.
+    ///
+    /// Returns the ID of the request, which can be used to find the matching response.
+    ///
+    /// The request might not be sent immediately. This happens when the client node does not
+    /// which KVS nodes are responsible for the key. In this case, it sends a [`AddressRequest`]
+    /// message to one of the configured routing nodes first.
+    ///
+    /// Each `PUT` request is acknowledged by the KVS node with a [`Response`] message. To receive
+    /// this response, the [`Self::wait_for_matching_response`] or [`Self::receive_async`]
+    /// function can be used.
+    pub async fn add_set_async(
+        &mut self,
+        key: ClientKey,
+        lattice: SetLattice<Vec<u8>>,
+    ) -> eyre::Result<String> {
+        let request_id = self.generate_request_id();
+        let request = ClientRequest {
+            operation: KeyOperation::SetAdd(Key::Client(key), lattice),
+            response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
+            request_id: request_id.clone(),
+            address_cache_size: HashMap::new(),
+            timestamp: Instant::now(),
+        };
+
+        self.try_request(request).await?;
+
+        Ok(request_id)
+    }
+
     /// Requests the value stored for the given key.
     ///
     /// Returns the ID of the request, which can be used to find the matching response.
@@ -526,15 +556,21 @@ impl ClientNode {
     async fn get_set(&mut self, key: ClientKey) -> eyre::Result<HashSet<Vec<u8>>> {
         let lattice = self.get(key).await?;
 
-        Ok(lattice.into_set()?.into_revealed())
+        Ok(lattice
+            .into_single_causal()?
+            .into_revealed()
+            .value
+            .into_revealed())
     }
 
-    async fn put_set(&mut self, key: ClientKey, set: HashSet<Vec<u8>>) -> eyre::Result<()> {
+    async fn add_set(&mut self, key: ClientKey, set: HashSet<Vec<u8>>) -> eyre::Result<()> {
         let lattice_val = SetLattice::new(set);
 
-        self.put(key, LatticeValue::Set(lattice_val))
+        let request_id = self
+            .add_set_async(key, lattice_val)
             .await
-            .context("put failed")?;
+            .context("failed to send add_set")?;
+        self.wait_for_matching_response(request_id).await?;
 
         Ok(())
     }

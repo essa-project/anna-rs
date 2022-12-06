@@ -54,6 +54,11 @@ where
         }
     }
 
+    /// Same as `std::collections::HashMap::entry`.
+    pub(crate) fn entry<'db>(&'db mut self, key: K) -> hash_map::Entry<'db, K, LatticeValue> {
+        self.db.entry(key)
+    }
+
     /// Removes the given key from the store.
     pub fn remove<Q>(&mut self, key: &Q)
     where

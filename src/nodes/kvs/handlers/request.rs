@@ -6,7 +6,10 @@ use crate::{
     },
     AnnaError, Key,
 };
-use anna_api::LatticeValue;
+use anna_api::{
+    lattice::{causal::SingleKeyCausalLattice, MaxLattice},
+    LatticeValue,
+};
 use eyre::Context;
 use smol::net::TcpStream;
 use std::time::Instant;
@@ -16,6 +19,9 @@ impl KvsNode {
         &mut self,
         operation: KeyOperation,
     ) -> Result<Option<LatticeValue>, AnnaError> {
+        use anna_api::lattice::Lattice;
+        use std::collections::hash_map::Entry;
+
         match operation {
             KeyOperation::Get(key) => match self.kvs.get(&key) {
                 Some(value) => Ok(Some(value.clone())),
@@ -27,6 +33,29 @@ impl KvsNode {
                 self.kvs.put(key.into(), tuple.value.clone())?;
                 self.local_changeset.insert(tuple.key);
                 Ok(Some(tuple.value))
+            }
+            KeyOperation::SetAdd(key, value) => {
+                match self.kvs.entry(key.clone()) {
+                    Entry::Vacant(entry) => {
+                        entry.insert(LatticeValue::SingleCausal(
+                            SingleKeyCausalLattice::create_with_default_clock(value),
+                        ));
+                    }
+                    Entry::Occupied(mut entry) => {
+                        if let LatticeValue::SingleCausal(set) = entry.get_mut() {
+                            set.reveal_mut().value.merge(&value);
+                            set.reveal_mut().vector_clock.insert(
+                                format!("{}/{}", self.node_id, self.thread_id),
+                                MaxLattice::new(self.gossip_epoch),
+                            )
+                        } else {
+                            return Err(AnnaError::Lattice);
+                        }
+                    }
+                }
+
+                self.local_changeset.insert(key);
+                Ok(None)
             }
         }
     }

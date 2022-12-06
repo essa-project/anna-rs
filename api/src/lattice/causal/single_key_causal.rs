@@ -18,6 +18,13 @@ impl<T> SingleKeyCausalLattice<T> {
     pub fn new(element: VectorClockValuePair<T>) -> Self {
         Self { element }
     }
+
+    /// Creates a new lattice from the given value and a default vector clock.
+    pub fn create_with_default_clock(value: T) -> Self {
+        Self {
+            element: VectorClockValuePair::new(Default::default(), value),
+        }
+    }
 }
 
 impl<T> Lattice for SingleKeyCausalLattice<T>

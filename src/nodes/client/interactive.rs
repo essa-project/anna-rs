@@ -172,13 +172,13 @@ impl ClientNode {
                 log::trace!("[OK] Got {} from GET", string);
                 writeln!(stdout, "{}", string)?;
             }
-            "PUT_SET" | "put_set" => {
+            "ADD_SET" | "add_set" => {
                 let key = split
                     .next()
                     .ok_or_else(|| anyhow!("missing key and value arguments"))?;
                 let value = split.map(|s| s.to_owned().into_bytes()).collect();
 
-                smol::block_on(self.put_set(key.into(), value))?;
+                smol::block_on(self.add_set(key.into(), value))?;
                 writeln!(stdout, "Success!")?;
             }
             "GET_SET" | "get_set" => {

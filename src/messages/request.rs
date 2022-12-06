@@ -1,5 +1,7 @@
 //! Provides the main [`Request`] struct and related types.
 
+use anna_api::lattice::SetLattice;
+
 use super::response::{Response, ResponseType};
 use crate::{store::LatticeValue, ClientKey, Key};
 use std::collections::HashMap;
@@ -82,6 +84,8 @@ pub enum KeyOperation {
     Get(Key),
     /// Assign a new value to a key.
     Put(ModifyTuple),
+    /// Merge a single-key causal lattice to a key.
+    SetAdd(Key, SetLattice<Vec<u8>>),
 }
 
 impl KeyOperation {
@@ -90,6 +94,7 @@ impl KeyOperation {
         match self {
             KeyOperation::Get(key) => key,
             KeyOperation::Put(t) => &t.key,
+            KeyOperation::SetAdd(t, _) => t,
         }
     }
 
@@ -98,16 +103,7 @@ impl KeyOperation {
         match self {
             KeyOperation::Get(_) => ResponseType::Get,
             KeyOperation::Put(_) => ResponseType::Put,
-        }
-    }
-
-    /// Returns the associated [`LatticeValue`] if this is a PUT operation.
-    ///
-    /// Returns [`None`][Option::None] if this is a GET operation.
-    pub fn into_value(self) -> Option<LatticeValue> {
-        match self {
-            KeyOperation::Get(_) => None,
-            KeyOperation::Put(t) => Some(t.value),
+            KeyOperation::SetAdd(..) => ResponseType::SetAdd,
         }
     }
 }
