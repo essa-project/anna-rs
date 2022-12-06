@@ -114,6 +114,7 @@ impl ReportData {
         let access = self.create_access_report(node_tier, node, ts)?;
         let size = self.create_size_report(node_tier, node, ts, primary_key_size)?;
 
+        // self.management_id is always None at now.
         if let Some(management_id) = &self.management_id {
             zenoh
                 .put(

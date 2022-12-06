@@ -1,16 +1,36 @@
 use crate::{
-    messages::{request::KeyOperation, response::ResponseTuple, Request, TcpMessage, Tier},
+    messages::{request::KeyOperation, response::ResponseTuple, Request, TcpMessage},
     nodes::{
         kvs::{KvsNode, PendingRequest},
         send_tcp_message,
     },
     AnnaError, Key,
 };
+use anna_api::LatticeValue;
 use eyre::Context;
 use smol::net::TcpStream;
 use std::time::Instant;
 
 impl KvsNode {
+    pub(crate) fn key_operation_handler(
+        &mut self,
+        operation: KeyOperation,
+    ) -> Result<Option<LatticeValue>, AnnaError> {
+        match operation {
+            KeyOperation::Get(key) => match self.kvs.get(&key) {
+                Some(value) => Ok(Some(value.clone())),
+                None => Err(AnnaError::KeyDoesNotExist),
+            },
+
+            KeyOperation::Put(tuple) => {
+                let key = tuple.key.clone();
+                self.kvs.put(key.into(), tuple.value.clone())?;
+                self.local_changeset.insert(tuple.key);
+                Ok(Some(tuple.value))
+            }
+        }
+    }
+
     /// Handles incoming request messages.
     pub async fn request_handler(
         &mut self,
@@ -51,10 +71,7 @@ impl KvsNode {
                             // this means that this node is not responsible for this metadata key
                             let tp = ResponseTuple {
                                 key: key.into(),
-                                lattice: match tuple {
-                                    KeyOperation::Get(_) => None,
-                                    KeyOperation::Put(t) => Some(t.value),
-                                },
+                                lattice: None,
                                 error: Some(AnnaError::WrongThread),
                                 invalidate: Default::default(),
                             };
@@ -64,22 +81,11 @@ impl KvsNode {
                         Key::Client(key) => {
                             // if we don't know what threads are responsible, we issue a rep
                             // factor request and make the request pending
-                            self.hash_ring_util
-                                .issue_replication_factor_request(
-                                    self.wt.replication_response_topic(&self.zenoh_prefix),
-                                    key.clone(),
-                                    &self.global_hash_rings[&Tier::Memory],
-                                    &self.local_hash_rings[&Tier::Memory],
-                                    &self.zenoh,
-                                    &self.zenoh_prefix,
-                                    &mut self.node_connections,
-                                )
-                                .await?;
+                            self.issue_replication_factor_request(key.clone()).await?;
 
                             self.pending_requests.entry(key.into()).or_default().push(
                                 PendingRequest {
-                                    ty: tuple.response_ty(),
-                                    lattice: tuple.into_value(),
+                                    operation: tuple,
                                     addr: response_addr.clone(),
                                     response_id: response_id.clone(),
                                     reply_stream: reply_stream.clone(),
@@ -96,23 +102,9 @@ impl KvsNode {
                         invalidate: false,
                     };
 
-                    match tuple {
-                        KeyOperation::Get(key) => match self.kvs.get(&key) {
-                            Some(value) => {
-                                tp.lattice = Some(value.clone());
-                            }
-                            None => {
-                                tp.error = Some(AnnaError::KeyDoesNotExist);
-                            }
-                        },
-                        KeyOperation::Put(tuple) => {
-                            if let Err(err) = self.kvs.put(tuple.key.clone(), tuple.value.clone()) {
-                                tp.error = Some(err);
-                            } else {
-                                self.local_changeset.insert(tuple.key);
-                                tp.lattice = Some(tuple.value);
-                            }
-                        }
+                    match self.key_operation_handler(tuple) {
+                        Ok(value) => tp.lattice = value,
+                        Err(err) => tp.error = Some(err),
                     }
 
                     if let Key::Client(key) = &key {
@@ -129,11 +121,10 @@ impl KvsNode {
                 }
             } else {
                 self.pending_requests
-                    .entry(key)
+                    .entry(key.clone())
                     .or_default()
                     .push(PendingRequest {
-                        ty: tuple.response_ty(),
-                        lattice: tuple.into_value(),
+                        operation: tuple,
                         addr: response_addr.clone(),
                         response_id: response_id.clone(),
                         reply_stream: reply_stream.clone(),

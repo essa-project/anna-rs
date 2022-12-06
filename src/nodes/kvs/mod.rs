@@ -6,7 +6,7 @@ use crate::{
     config::Config,
     hash_ring::{tier_name, GlobalHashRing, HashRingUtil, KeyReplication, LocalHashRing},
     messages::{
-        self, cluster_membership::ClusterInfo, response::ResponseType, Response, TcpMessage, Tier,
+        self, cluster_membership::ClusterInfo, request::KeyOperation, Response, TcpMessage, Tier,
     },
     metadata::TierMetadata,
     store::{LatticeValue, LatticeValueStore},
@@ -33,6 +33,7 @@ use super::{receive_tcp_message, request_cluster_info, send_tcp_message};
 
 mod gossip;
 mod handlers;
+mod hash_ring_util;
 mod report;
 
 /// Starts a new multithreaded KVS node based on the given config.
@@ -737,8 +738,7 @@ pub struct ConfigData {
 
 #[derive(Debug)]
 struct PendingRequest {
-    ty: ResponseType,
-    lattice: Option<LatticeValue>,
+    operation: KeyOperation,
     addr: Option<String>,
     reply_stream: Option<TcpStream>,
     response_id: Option<String>,
@@ -748,7 +748,7 @@ impl PendingRequest {
     fn new_response(&self) -> Response {
         Response {
             response_id: self.response_id.clone(),
-            ty: self.ty,
+            ty: self.operation.response_ty(),
             tuples: Default::default(),
             error: Ok(()),
         }

@@ -1,5 +1,5 @@
 use crate::{
-    messages::{request::RequestData, Request, Tier},
+    messages::{request::RequestData, Request},
     nodes::kvs::{KvsNode, PendingGossip},
 };
 use eyre::{bail, Context};
@@ -56,17 +56,7 @@ impl KvsNode {
                             }
                         }
                         crate::Key::Client(key) => {
-                            self.hash_ring_util
-                                .issue_replication_factor_request(
-                                    self.wt.replication_response_topic(&self.zenoh_prefix),
-                                    key.clone(),
-                                    &self.global_hash_rings[&Tier::Memory],
-                                    &self.local_hash_rings[&Tier::Memory],
-                                    &self.zenoh,
-                                    &self.zenoh_prefix,
-                                    &mut self.node_connections,
-                                )
-                                .await?;
+                            self.issue_replication_factor_request(key.clone()).await?;
 
                             self.pending_gossip.entry(key.into()).or_default().push(
                                 PendingGossip {
@@ -87,7 +77,7 @@ impl KvsNode {
         }
 
         // redirect gossip
-        for (address, tuples) in gossip_map {
+        for (gossip_address, tuples) in gossip_map {
             let key_request = Request {
                 request: RequestData::Put { tuples },
                 response_address: Default::default(),
@@ -97,7 +87,7 @@ impl KvsNode {
             let serialized =
                 rmp_serde::to_vec(&key_request).context("failed to serialize KeyRequest")?;
             self.zenoh
-                .put(&address, serialized)
+                .put(&gossip_address, serialized)
                 .await
                 .map_err(|e| eyre::eyre!(e))?;
         }

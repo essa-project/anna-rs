@@ -4,7 +4,7 @@ use crate::{
         replication_factor::ReplicationFactor,
         request::{PutTuple, RequestData},
         response::{ResponseTuple, ResponseType},
-        Request, Response, TcpMessage, Tier,
+        Request, Response, TcpMessage,
     },
     metadata::MetadataKey,
     nodes::{kvs::KvsNode, send_tcp_message},
@@ -67,18 +67,7 @@ impl KvsNode {
             Some(AnnaError::WrongThread) => {
                 // this means that the node that received the rep factor request was not
                 // responsible for that metadata
-                let respond_address = self.wt.replication_response_topic(&self.zenoh_prefix);
-                self.hash_ring_util
-                    .issue_replication_factor_request(
-                        respond_address,
-                        key.clone(),
-                        &self.global_hash_rings[&Tier::Memory],
-                        &self.local_hash_rings[&Tier::Memory],
-                        &self.zenoh,
-                        &self.zenoh_prefix,
-                        &mut self.node_connections,
-                    )
-                    .await?;
+                self.issue_replication_factor_request(key.clone()).await?;
                 return Ok(());
             }
             error => {
@@ -123,19 +112,9 @@ impl KvsNode {
                                 invalidate: false,
                             };
 
-                            if request.ty == ResponseType::Get {
-                                match self.kvs.get(&key) {
-                                    Some(value) => tp.lattice = Some(value.clone()),
-                                    None => tp.error = Some(AnnaError::KeyDoesNotExist),
-                                }
-                            } else {
-                                let value = request
-                                    .lattice
-                                    .ok_or_else(|| anyhow!("PUT request has no lattice value"))?;
-                                self.kvs.put(key.clone(), value.clone())?;
-
-                                tp.lattice = Some(value.clone());
-                                self.local_changeset.insert(key.clone());
+                            match self.key_operation_handler(request.operation) {
+                                Ok(lattice) => tp.lattice = lattice,
+                                Err(error) => tp.error = Some(error),
                             }
                             response.tuples.push(tp);
 
@@ -163,17 +142,9 @@ impl KvsNode {
                         }
                     } else if responsible {
                         // only put requests should fall into this category
-                        if request.ty == ResponseType::Put {
-                            match request.lattice {
-                                None => {
-                                    log::error!("PUT request is missing lattice value");
-                                }
-                                Some(value) => {
-                                    self.kvs.put(key.clone(), value)?;
-                                    self.report_data.record_key_access(&key, now);
-                                    self.local_changeset.insert(key.clone());
-                                }
-                            }
+                        if request.operation.response_ty() == ResponseType::Put {
+                            let _ = self.key_operation_handler(request.operation);
+                            self.report_data.record_key_access(&key, now);
                         } else {
                             log::error!("Received a GET request with no response address.");
                         }
