@@ -9,7 +9,7 @@ use crate::{
     },
     messages::{
         request::{KeyOperation, PutTuple, RequestData},
-        response::ResponseTuple,
+        response::{ResponseTuple, ResponseType},
         AddressRequest, AddressResponse, Request, Response, TcpMessage,
     },
     store::LatticeValue,
@@ -841,7 +841,6 @@ fn check_tuple(
 
 fn generate_bad_response(req: &Request) -> Response {
     Response {
-        ty: req.request.ty(),
         response_id: req.request_id.clone(),
         error: Err(AnnaError::Timeout),
         tuples: match req.request.clone() {
@@ -850,6 +849,7 @@ fn generate_bad_response(req: &Request) -> Response {
                 .map(|key| ResponseTuple {
                     key,
                     lattice: None,
+                    ty: ResponseType::Get,
                     error: None,
                     invalidate: false,
                 })
@@ -859,6 +859,7 @@ fn generate_bad_response(req: &Request) -> Response {
                 .map(|t| ResponseTuple {
                     key: t.key,
                     lattice: Some(t.value),
+                    ty: ResponseType::Put,
                     error: None,
                     invalidate: false,
                 })

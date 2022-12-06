@@ -18,7 +18,7 @@ impl KvsNode {
     pub async fn replication_response_handler(&mut self, response: Response) -> eyre::Result<()> {
         let work_start = Instant::now();
 
-        if response.error.is_err() || response.ty != ResponseType::Get {
+        if response.error.is_err() {
             bail!("invalid replication response");
         }
 
@@ -26,6 +26,11 @@ impl KvsNode {
             [tuple] => tuple,
             other => bail!("expected single response tuple, got `{:?}`", other),
         };
+
+        if tuple.ty != ResponseType::Get {
+            bail!("invalid replication response");
+        }
+
         let key = match &tuple.key {
             Key::Metadata(MetadataKey::Replication { key }) => key.clone(),
             other => bail!("expected replication metadata key, got {:?}", other),
@@ -108,6 +113,7 @@ impl KvsNode {
                             let mut tp = ResponseTuple {
                                 key: key.clone(),
                                 lattice: None,
+                                ty: request.operation.response_ty(),
                                 error: None,
                                 invalidate: false,
                             };
@@ -123,6 +129,7 @@ impl KvsNode {
                             let tp = ResponseTuple {
                                 key: key.clone(),
                                 lattice: None,
+                                ty: request.operation.response_ty(),
                                 error: Some(AnnaError::WrongThread),
                                 invalidate: false,
                             };

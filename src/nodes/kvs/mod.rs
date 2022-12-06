@@ -748,7 +748,6 @@ impl PendingRequest {
     fn new_response(&self) -> Response {
         Response {
             response_id: self.response_id.clone(),
-            ty: self.operation.response_ty(),
             tuples: Default::default(),
             error: Ok(()),
         }

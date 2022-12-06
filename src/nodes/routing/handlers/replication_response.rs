@@ -199,7 +199,6 @@ mod tests {
         entry.local_replication.insert(Tier::Disk, 1);
 
         let mut response = Response {
-            ty: ResponseType::Put,
             tuples: Default::default(),
             response_id: Default::default(),
             error: Ok(()),
@@ -207,6 +206,7 @@ mod tests {
         let mut tp = ResponseTuple {
             key: MetadataKey::Replication { key: key.clone() }.into(),
             lattice: None,
+            ty: ResponseType::Put,
             error: None,
             invalidate: false,
         };

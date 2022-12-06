@@ -29,7 +29,6 @@ impl Request {
     pub fn new_response(&self) -> Response {
         Response {
             response_id: self.request_id.clone(),
-            ty: self.request.ty(),
             tuples: Default::default(),
             error: Ok(()),
         }

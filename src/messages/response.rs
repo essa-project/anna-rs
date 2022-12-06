@@ -8,8 +8,6 @@ pub struct Response {
     /// The request_id specified in the corresponding KeyRequest. Used to
     /// associate asynchornous requests and responses.
     pub response_id: Option<String>,
-    /// The type of response being sent back to the client (see RequestType).
-    pub ty: ResponseType,
     /// Any errors associated with the whole request. Individual tuple errors are
     /// captured in the corresponding KeyTuple. This will only be set if the whole
     /// request times out.
@@ -38,6 +36,8 @@ pub struct ResponseTuple {
     pub key: Key,
     /// The lattice value for this key.
     pub lattice: Option<LatticeValue>,
+    /// The type of response being sent back to the client (see RequestType).
+    pub ty: ResponseType,
     /// The error type specified by the server (see AnnaError).
     pub error: Option<AnnaError>,
     /// A boolean set by the server if the client's address_cache_size does not

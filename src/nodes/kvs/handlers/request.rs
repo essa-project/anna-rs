@@ -72,6 +72,7 @@ impl KvsNode {
                             let tp = ResponseTuple {
                                 key: key.into(),
                                 lattice: None,
+                                ty: tuple.response_ty(),
                                 error: Some(AnnaError::WrongThread),
                                 invalidate: Default::default(),
                             };
@@ -98,6 +99,7 @@ impl KvsNode {
                     let mut tp = ResponseTuple {
                         key: key.clone(),
                         lattice: None,
+                        ty: tuple.response_ty(),
                         error: None,
                         invalidate: false,
                     };
