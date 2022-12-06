@@ -854,7 +854,7 @@ fn generate_bad_response(req: &Request) -> Response {
                     invalidate: false,
                 })
                 .collect(),
-            RequestData::Put { tuples } => tuples
+            RequestData::Put { tuples } | RequestData::Gossip { tuples } => tuples
                 .into_iter()
                 .map(|t| ResponseTuple {
                     key: t.key,

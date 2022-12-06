@@ -2,9 +2,9 @@ use crate::{
     lattice::Lattice,
     messages::{
         replication_factor::ReplicationFactor,
-        request::{ModifyTuple, RequestData},
+        request::ModifyTuple,
         response::{ResponseTuple, ResponseType},
-        Request, Response, TcpMessage,
+        Response, TcpMessage,
     },
     metadata::MetadataKey,
     nodes::{kvs::KvsNode, send_tcp_message},
@@ -204,21 +204,7 @@ impl KvsNode {
                     }
 
                     // redirect gossip
-                    for (address, tuples) in gossip_map {
-                        let key_request = Request {
-                            request: RequestData::Put { tuples },
-                            response_address: Default::default(),
-                            request_id: Default::default(),
-                            address_cache_size: Default::default(),
-                        };
-                        let serialized = rmp_serde::to_vec(&key_request)
-                            .map_err(|e| eyre::eyre!(e))
-                            .context("failed to serialize KeyRequest")?;
-                        self.zenoh
-                            .put(&address, serialized)
-                            .await
-                            .map_err(|e| eyre::eyre!(e))?;
-                    }
+                    self.redirect_gossip(gossip_map).await?;
                 }
             } else {
                 log::error!("Missing key replication factor in process pending gossip routine.");

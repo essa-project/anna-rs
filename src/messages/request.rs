@@ -48,6 +48,11 @@ pub enum RequestData {
         /// A list of updates batched in this request.
         tuples: Vec<ModifyTuple>,
     },
+    /// Performs the given updates that from gossip in the key value store.
+    Gossip {
+        /// A list of updates batched in gossip request.
+        tuples: Vec<ModifyTuple>,
+    },
 }
 
 impl RequestData {
@@ -61,22 +66,10 @@ impl RequestData {
                 tuples.into_iter().map(KeyOperation::Get).collect()
             }
             RequestData::Put { tuples } => tuples.into_iter().map(KeyOperation::Put).collect(),
-        }
-    }
-
-    /// Returns the suitable [`ResponseType`] for this request.
-    pub fn ty(&self) -> ResponseType {
-        match self {
-            RequestData::Get { .. } => ResponseType::Get,
-            RequestData::Put { .. } => ResponseType::Put,
-        }
-    }
-
-    /// Returns the keys for this request.
-    pub fn keys(&self) -> Vec<Key> {
-        match self {
-            RequestData::Get { keys } => keys.clone(),
-            RequestData::Put { tuples } => tuples.iter().map(|tuple| tuple.key.clone()).collect(),
+            RequestData::Gossip { tuples } => {
+                log::warn!("received a gossip request, but expect not.");
+                tuples.into_iter().map(KeyOperation::Put).collect()
+            }
         }
     }
 }

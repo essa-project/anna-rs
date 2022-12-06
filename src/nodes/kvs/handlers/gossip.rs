@@ -15,9 +15,12 @@ impl KvsNode {
         let mut gossip_map: HashMap<_, Vec<_>> = HashMap::new();
 
         let tuples = match gossip.request {
-            RequestData::Put { tuples } => tuples,
+            RequestData::Gossip { tuples } => tuples,
             RequestData::Get { .. } => {
                 bail!("received gossip request with request type Get")
+            }
+            RequestData::Put { .. } => {
+                bail!("received gossip request with request type Put")
             }
         };
 
@@ -77,20 +80,7 @@ impl KvsNode {
         }
 
         // redirect gossip
-        for (gossip_address, tuples) in gossip_map {
-            let key_request = Request {
-                request: RequestData::Put { tuples },
-                response_address: Default::default(),
-                request_id: Default::default(),
-                address_cache_size: Default::default(),
-            };
-            let serialized =
-                rmp_serde::to_vec(&key_request).context("failed to serialize KeyRequest")?;
-            self.zenoh
-                .put(&gossip_address, serialized)
-                .await
-                .map_err(|e| eyre::eyre!(e))?;
-        }
+        self.redirect_gossip(gossip_map).await?;
 
         let time_elapsed = Instant::now() - work_start;
         self.report_data.record_working_time(time_elapsed, 4);
@@ -118,7 +108,7 @@ mod tests {
         zenoh_prefix: &str,
     ) -> Vec<u8> {
         let request = Request {
-            request: RequestData::Put {
+            request: RequestData::Gossip {
                 tuples: vec![ModifyTuple {
                     key: key.into(),
                     value: lattice_value,
