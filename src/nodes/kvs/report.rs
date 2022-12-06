@@ -3,7 +3,7 @@ use crate::{
     messages::{
         key_data::{KeyAccessData, KeyCount, KeySizeData},
         management::FuncNodesQuery,
-        request::{PutTuple, RequestData},
+        request::{ModifyTuple, RequestData},
         user_feedback::ServerThreadStatistics,
         Request, Tier,
     },
@@ -174,7 +174,7 @@ impl ReportData {
             rmp_serde::to_vec(&stat).context("failed to serialize ServerThreadStatistics")?;
         let stat_req = Request {
             request: RequestData::Put {
-                tuples: vec![PutTuple {
+                tuples: vec![ModifyTuple {
                     key: key.clone().into(),
                     value: LatticeValue::Lww(LastWriterWinsLattice::from_pair(ts, serialized_stat)),
                 }],
@@ -222,7 +222,7 @@ impl ReportData {
             rmp_serde::to_vec(&access).context("failed to serialize KeyAccessData")?;
         let access_req = Request {
             request: RequestData::Put {
-                tuples: vec![PutTuple {
+                tuples: vec![ModifyTuple {
                     key: key.clone().into(),
                     value: LatticeValue::Lww(LastWriterWinsLattice::from_pair(
                         ts,
@@ -256,7 +256,7 @@ impl ReportData {
             rmp_serde::to_vec(&primary_key_size).context("failed to serialize KeySizeData")?;
         let size_req = Request {
             request: RequestData::Put {
-                tuples: vec![PutTuple {
+                tuples: vec![ModifyTuple {
                     key: key.clone().into(),
                     value: LatticeValue::Lww(LastWriterWinsLattice::from_pair(ts, serialized_size)),
                 }],

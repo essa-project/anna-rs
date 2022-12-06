@@ -2,7 +2,7 @@ use super::KvsNode;
 use crate::{
     messages::{
         key_data::{KeySize, KeySizeData},
-        request::{PutTuple, RequestData},
+        request::{ModifyTuple, RequestData},
         Request, Tier,
     },
     nodes::kvs::report::ReportMessage,
@@ -211,7 +211,7 @@ impl KvsNode {
             let mut tuples = Vec::new();
             for key in keys {
                 if let Some(value) = self.kvs.get(key) {
-                    tuples.push(PutTuple {
+                    tuples.push(ModifyTuple {
                         key: key.clone(),
                         value: value.clone(),
                     });

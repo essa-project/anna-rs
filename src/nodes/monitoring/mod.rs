@@ -8,7 +8,7 @@ use crate::{
     messages::{
         management::AddNodes,
         replication_factor::{ReplicationFactor, ReplicationFactorUpdate, ReplicationValue},
-        request::{PutTuple, RequestData},
+        request::{ModifyTuple, RequestData},
         Request, Response, SelfDepart, Tier,
     },
     metadata::{MetadataKey, TierMetadata},
@@ -398,7 +398,7 @@ impl<'a> MonitoringNode<'a> {
                 let response_addr = self.mt.response_topic(&self.zenoh_prefix);
                 entry.insert(Request {
                     request: RequestData::Put {
-                        tuples: vec![PutTuple {
+                        tuples: vec![ModifyTuple {
                             key: key.clone().into(),
                             value: LatticeValue::Lww(LastWriterWinsLattice::from_pair(
                                 Timestamp::now(),

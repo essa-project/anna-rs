@@ -46,7 +46,7 @@ pub enum RequestData {
     /// Performs the given updates in the key value store.
     Put {
         /// A list of updates batched in this request.
-        tuples: Vec<PutTuple>,
+        tuples: Vec<ModifyTuple>,
     },
 }
 
@@ -83,7 +83,7 @@ impl RequestData {
 
 /// Describes an assign operation on a specific key.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct PutTuple {
+pub struct ModifyTuple {
     /// The key that should be updated.
     pub key: Key,
     /// The new value that should be merged into the current one.
@@ -96,7 +96,7 @@ pub enum KeyOperation {
     /// Get the value of a key.
     Get(Key),
     /// Assign a new value to a key.
-    Put(PutTuple),
+    Put(ModifyTuple),
 }
 
 impl KeyOperation {

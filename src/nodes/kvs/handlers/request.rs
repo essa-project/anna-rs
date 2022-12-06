@@ -169,7 +169,7 @@ mod tests {
             LastWriterWinsLattice, Lattice, MaxLattice, OrderedSetLattice, SetLattice,
         },
         messages::{
-            request::{PutTuple, RequestData},
+            request::{ModifyTuple, RequestData},
             Request, Response,
         },
         nodes::kvs::kvs_test_instance,
@@ -212,7 +212,7 @@ mod tests {
     ) -> Request {
         Request {
             request: RequestData::Put {
-                tuples: vec![PutTuple {
+                tuples: vec![ModifyTuple {
                     key: key.into(),
                     value: lattice_value,
                 }],

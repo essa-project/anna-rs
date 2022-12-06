@@ -104,7 +104,7 @@ mod tests {
     use super::*;
     use crate::{
         lattice::{last_writer_wins::Timestamp, LastWriterWinsLattice, Lattice},
-        messages::request::PutTuple,
+        messages::request::ModifyTuple,
         nodes::kvs::kvs_test_instance,
         store::LatticeValue,
         topics::ClientThread,
@@ -119,7 +119,7 @@ mod tests {
     ) -> Vec<u8> {
         let request = Request {
             request: RequestData::Put {
-                tuples: vec![PutTuple {
+                tuples: vec![ModifyTuple {
                     key: key.into(),
                     value: lattice_value,
                 }],

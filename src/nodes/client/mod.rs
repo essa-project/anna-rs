@@ -8,7 +8,7 @@ use crate::{
         LastWriterWinsLattice, Lattice, MapLattice, MaxLattice, SetLattice,
     },
     messages::{
-        request::{KeyOperation, PutTuple, RequestData},
+        request::{KeyOperation, ModifyTuple, RequestData},
         response::{ResponseTuple, ResponseType},
         AddressRequest, AddressResponse, Request, Response, TcpMessage,
     },
@@ -298,7 +298,7 @@ impl ClientNode {
     ) -> eyre::Result<String> {
         let request_id = self.generate_request_id();
         let request = ClientRequest {
-            operation: KeyOperation::Put(PutTuple {
+            operation: KeyOperation::Put(ModifyTuple {
                 key: Key::Client(key),
                 value: lattice,
             }),
