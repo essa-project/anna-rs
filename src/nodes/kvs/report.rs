@@ -3,7 +3,7 @@ use crate::{
     messages::{
         key_data::{KeyAccessData, KeyCount, KeySizeData},
         management::FuncNodesQuery,
-        request::{ModifyTuple, RequestData},
+        request::{KeyOperation, ModifyTuple, RequestData},
         user_feedback::ServerThreadStatistics,
         Request, Tier,
     },
@@ -173,11 +173,11 @@ impl ReportData {
         let serialized_stat =
             rmp_serde::to_vec(&stat).context("failed to serialize ServerThreadStatistics")?;
         let stat_req = Request {
-            request: RequestData::Put {
-                tuples: vec![ModifyTuple {
+            request: RequestData::Operation {
+                operations: vec![KeyOperation::Put(ModifyTuple {
                     key: key.clone().into(),
                     value: LatticeValue::Lww(LastWriterWinsLattice::from_pair(ts, serialized_stat)),
-                }],
+                })],
             },
             response_address: Default::default(),
             request_id: Default::default(),
@@ -221,14 +221,14 @@ impl ReportData {
         let serialized_access =
             rmp_serde::to_vec(&access).context("failed to serialize KeyAccessData")?;
         let access_req = Request {
-            request: RequestData::Put {
-                tuples: vec![ModifyTuple {
+            request: RequestData::Operation {
+                operations: vec![KeyOperation::Put(ModifyTuple {
                     key: key.clone().into(),
                     value: LatticeValue::Lww(LastWriterWinsLattice::from_pair(
                         ts,
                         serialized_access,
                     )),
-                }],
+                })],
             },
             response_address: Default::default(),
             request_id: Default::default(),
@@ -255,11 +255,11 @@ impl ReportData {
         let serialized_size =
             rmp_serde::to_vec(&primary_key_size).context("failed to serialize KeySizeData")?;
         let size_req = Request {
-            request: RequestData::Put {
-                tuples: vec![ModifyTuple {
+            request: RequestData::Operation {
+                operations: vec![KeyOperation::Put(ModifyTuple {
                     key: key.clone().into(),
                     value: LatticeValue::Lww(LastWriterWinsLattice::from_pair(ts, serialized_size)),
-                }],
+                })],
             },
             response_address: Default::default(),
             request_id: Default::default(),

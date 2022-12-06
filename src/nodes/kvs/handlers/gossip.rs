@@ -16,11 +16,8 @@ impl KvsNode {
 
         let tuples = match gossip.request {
             RequestData::Gossip { tuples } => tuples,
-            RequestData::Get { .. } => {
-                bail!("received gossip request with request type Get")
-            }
-            RequestData::Put { .. } => {
-                bail!("received gossip request with request type Put")
+            RequestData::Operation { .. } => {
+                bail!("received gossip request with request type Operation")
             }
         };
 

@@ -1,5 +1,9 @@
 use crate::{
-    messages::{management::NodeSet, request::RequestData, Request, Tier},
+    messages::{
+        management::NodeSet,
+        request::{KeyOperation, RequestData},
+        Request, Tier,
+    },
     metadata::MetadataKey,
     nodes::kvs::KvsNode,
 };
@@ -65,8 +69,8 @@ impl KvsNode {
                 {
                     let response_address = self.wt.cache_ip_response_topic(&self.zenoh_prefix);
                     e.insert(Request {
-                        request: RequestData::Get {
-                            keys: vec![key.into()],
+                        request: RequestData::Operation {
+                            operations: vec![KeyOperation::Get(key.into())],
                         },
                         // NB: response_address might not be necessary here
                         // (or in other places where req_id is constructed either).

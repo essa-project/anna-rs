@@ -169,7 +169,7 @@ mod tests {
             LastWriterWinsLattice, Lattice, MaxLattice, OrderedSetLattice, SetLattice,
         },
         messages::{
-            request::{ModifyTuple, RequestData},
+            request::{KeyOperation, ModifyTuple, RequestData},
             Request, Response,
         },
         nodes::kvs::kvs_test_instance,
@@ -190,8 +190,8 @@ mod tests {
         zenoh_prefix: &str,
     ) -> Request {
         Request {
-            request: RequestData::Get {
-                keys: vec![key.into()],
+            request: RequestData::Operation {
+                operations: vec![KeyOperation::Get(key.into())],
             },
             response_address: Some(
                 ClientThread::new(node_id, 0)
@@ -211,11 +211,11 @@ mod tests {
         zenoh_prefix: &str,
     ) -> Request {
         Request {
-            request: RequestData::Put {
-                tuples: vec![ModifyTuple {
+            request: RequestData::Operation {
+                operations: vec![KeyOperation::Put(ModifyTuple {
                     key: key.into(),
                     value: lattice_value,
-                }],
+                })],
             },
             response_address: Some(
                 ClientThread::new(node_id, 0)

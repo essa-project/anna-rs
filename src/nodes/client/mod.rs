@@ -844,17 +844,17 @@ fn generate_bad_response(req: &Request) -> Response {
         response_id: req.request_id.clone(),
         error: Err(AnnaError::Timeout),
         tuples: match req.request.clone() {
-            RequestData::Get { keys } => keys
+            RequestData::Operation { operations } => operations
                 .into_iter()
-                .map(|key| ResponseTuple {
-                    key,
+                .map(|key_operation| ResponseTuple {
+                    key: key_operation.key().clone(),
                     lattice: None,
-                    ty: ResponseType::Get,
+                    ty: key_operation.response_ty(),
                     error: None,
                     invalidate: false,
                 })
                 .collect(),
-            RequestData::Put { tuples } | RequestData::Gossip { tuples } => tuples
+            RequestData::Gossip { tuples } => tuples
                 .into_iter()
                 .map(|t| ResponseTuple {
                     key: t.key,

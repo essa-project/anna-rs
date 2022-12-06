@@ -8,7 +8,7 @@ use crate::{
     messages::{
         management::AddNodes,
         replication_factor::{ReplicationFactor, ReplicationFactorUpdate, ReplicationValue},
-        request::{ModifyTuple, RequestData},
+        request::{KeyOperation, ModifyTuple, RequestData},
         Request, Response, SelfDepart, Tier,
     },
     metadata::{MetadataKey, TierMetadata},
@@ -363,8 +363,8 @@ impl<'a> MonitoringNode<'a> {
             if let hash_map::Entry::Vacant(entry) = addr_request_map.entry(target_address) {
                 let response_addr = self.mt.response_topic(&self.zenoh_prefix);
                 entry.insert(Request {
-                    request: RequestData::Get {
-                        keys: vec![key.clone().into()],
+                    request: RequestData::Operation {
+                        operations: vec![KeyOperation::Get(key.clone().into())],
                     },
                     // NB: response_address might not be necessary here
                     // (or in other places where req_id is constructed either).
@@ -397,14 +397,14 @@ impl<'a> MonitoringNode<'a> {
             if let hash_map::Entry::Vacant(entry) = addr_request_map.entry(target_address) {
                 let response_addr = self.mt.response_topic(&self.zenoh_prefix);
                 entry.insert(Request {
-                    request: RequestData::Put {
-                        tuples: vec![ModifyTuple {
+                    request: RequestData::Operation {
+                        operations: vec![KeyOperation::Put(ModifyTuple {
                             key: key.clone().into(),
                             value: LatticeValue::Lww(LastWriterWinsLattice::from_pair(
                                 Timestamp::now(),
                                 value,
                             )),
-                        }],
+                        })],
                     },
                     // NB: response_address might not be necessary here
                     // (or in other places where req_id is constructed either).

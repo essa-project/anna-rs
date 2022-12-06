@@ -38,15 +38,10 @@ impl Request {
 /// Specifies the request type and associated data.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum RequestData {
-    /// Request the stored values for a set of keys.
-    Get {
-        /// The list of keys that we want to get the values for.
-        keys: Vec<Key>,
-    },
-    /// Performs the given updates in the key value store.
-    Put {
-        /// A list of updates batched in this request.
-        tuples: Vec<ModifyTuple>,
+    /// Operate the stored values.
+    Operation {
+        /// The list of operations that we want to apply.
+        operations: Vec<KeyOperation>,
     },
     /// Performs the given updates that from gossip in the key value store.
     Gossip {
@@ -58,14 +53,11 @@ pub enum RequestData {
 impl RequestData {
     /// Splits the request into a list of operations.
     ///
-    /// For GET requests, this returns a list of [`KeyOperation::Get`] variants. For PUT
-    /// requests, it returns a list of [`KeyOperation::Put`] variants.
+    /// For Operation requests, this returns the `operations` in [RequestData::Operation].
+    /// For Gossip requests, it returns a list of [`KeyOperation::Put`] variants.
     pub fn into_tuples(self) -> Vec<KeyOperation> {
         match self {
-            RequestData::Get { keys: tuples } => {
-                tuples.into_iter().map(KeyOperation::Get).collect()
-            }
-            RequestData::Put { tuples } => tuples.into_iter().map(KeyOperation::Put).collect(),
+            RequestData::Operation { operations } => operations,
             RequestData::Gossip { tuples } => {
                 log::warn!("received a gossip request, but expect not.");
                 tuples.into_iter().map(KeyOperation::Put).collect()

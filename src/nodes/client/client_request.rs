@@ -31,14 +31,10 @@ pub struct ClientRequest {
 
 impl From<ClientRequest> for Request {
     fn from(r: ClientRequest) -> Self {
-        let request = match r.operation {
-            KeyOperation::Get(key) => RequestData::Get { keys: vec![key] },
-            KeyOperation::Put(put_tuple) => RequestData::Put {
-                tuples: vec![put_tuple],
-            },
-        };
         Request {
-            request,
+            request: RequestData::Operation {
+                operations: vec![r.operation],
+            },
             response_address: Some(r.response_address),
             request_id: Some(r.request_id),
             address_cache_size: r.address_cache_size,
