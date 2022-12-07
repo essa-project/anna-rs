@@ -1,3 +1,4 @@
+use super::display::LatticeDisplay;
 use super::ClientNode;
 use crate::{config::Config, lattice::Lattice, nodes::request_cluster_info, topics::RoutingThread};
 use eyre::{anyhow, bail, Context};
@@ -144,6 +145,20 @@ impl ClientNode {
             .next()
             .ok_or_else(|| anyhow!("no command entered.{}", HELP))?;
         match command {
+            "DISPLAY" | "display" => {
+                let key = split
+                    .next()
+                    .ok_or_else(|| anyhow!("missing key argument"))?;
+                if let Some(extra) = split.next() {
+                    bail!("unexpected argument `{}`", extra);
+                }
+
+                let value = smol::block_on(self.get(key.into()))?;
+                let string = value.display()?;
+
+                log::trace!("[OK] Got {} from DISPLAY", string);
+                writeln!(stdout, "{}", string)?;
+            }
             "PUT" | "put" => {
                 let key = split
                     .next()

@@ -36,6 +36,7 @@ use zenoh::prelude::SplitBuffer;
 use super::{receive_tcp_message, send_tcp_message};
 
 mod client_request;
+mod display;
 mod interactive;
 
 /// Client nodes interact with KVS nodes to serve user requests.
