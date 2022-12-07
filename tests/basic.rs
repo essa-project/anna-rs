@@ -67,9 +67,9 @@ fn get_set() {
         GET b\n\
         PUT a 10 \n\
         GET a\n\
-        PUT_SET set 1 2 3 \n\
+        ADD_SET set 1 2 3 \n\
         GET_SET set\n\
-        PUT_SET set 1 2 4\n\
+        ADD_SET set 1 2 4\n\
         GET_SET set\n\
         PUT_CAUSAL c hello\n\
         GET_CAUSAL c\n\
