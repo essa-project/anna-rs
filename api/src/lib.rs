@@ -1,7 +1,7 @@
 use eyre::anyhow;
 use lattice::{
     causal::{MultiKeyCausalLattice, SingleKeyCausalLattice},
-    LastWriterWinsLattice, OrderedSetLattice, SetLattice,
+    LastWriterWinsLattice, MapLattice, OrderedSetLattice, SetLattice,
 };
 use std::{error::Error, fmt::Display, sync::Arc};
 
@@ -60,6 +60,8 @@ pub enum LatticeValue {
     OrderedSet(OrderedSetLattice<Vec<u8>>),
     /// Single-key causal lattice
     SingleCausal(SingleKeyCausalLattice<SetLattice<Vec<u8>>>),
+    /// Single-key causal lattice
+    SingleCausalMap(SingleKeyCausalLattice<MapLattice<String, LastWriterWinsLattice<Vec<u8>>>>),
     /// Multi-key causal lattice
     MultiCausal(MultiKeyCausalLattice<SetLattice<Vec<u8>>>),
 }
@@ -187,6 +189,10 @@ impl LatticeValue {
                 s.merge(other);
                 Ok(())
             }
+            (LatticeValue::SingleCausalMap(s), LatticeValue::SingleCausalMap(other)) => {
+                s.merge(other);
+                Ok(())
+            }
             (LatticeValue::MultiCausal(s), LatticeValue::MultiCausal(other)) => {
                 s.merge(other);
                 Ok(())
@@ -203,6 +209,7 @@ impl LatticeValue {
             LatticeValue::Set(_) => LatticeType::Set,
             LatticeValue::OrderedSet(_) => LatticeType::OrderedSet,
             LatticeValue::SingleCausal(_) => LatticeType::SingleCausal,
+            LatticeValue::SingleCausalMap(_) => LatticeType::SingleCausalMap,
             LatticeValue::MultiCausal(_) => LatticeType::MultiCausal,
         }
     }
@@ -249,6 +256,8 @@ pub enum LatticeType {
     Set,
     /// Single-key causal lattice
     SingleCausal,
+    /// Single-key causal map lattice
+    SingleCausalMap,
     /// Multi-key causal lattice
     MultiCausal,
     /// Ordered-set lattice

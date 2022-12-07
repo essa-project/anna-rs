@@ -29,6 +29,8 @@ pub enum ResponseType {
     Put,
     /// Response to a request to add set into the KVS.
     SetAdd,
+    /// Response to a request to add hashmap into the KVS.
+    MapAdd,
 }
 
 /// A protobuf to represent an individual key, both for requests and responses.

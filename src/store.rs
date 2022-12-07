@@ -111,6 +111,7 @@ impl LatticeSizeEstimate for LatticeValue {
             LatticeValue::Set(lattice) => lattice.size_estimate(),
             LatticeValue::OrderedSet(lattice) => lattice.size_estimate(),
             LatticeValue::SingleCausal(lattice) => lattice.size_estimate(),
+            LatticeValue::SingleCausalMap(lattice) => lattice.size_estimate(),
             LatticeValue::MultiCausal(lattice) => lattice.size_estimate(),
         }
     }

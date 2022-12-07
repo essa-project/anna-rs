@@ -181,6 +181,23 @@ impl ClientNode {
                 smol::block_on(self.add_set(key.into(), value))?;
                 writeln!(stdout, "Success!")?;
             }
+            "ADD_HASHMAP" | "add_hashmap" => {
+                let key = split
+                    .next()
+                    .ok_or_else(|| anyhow!("missing key and value arguments"))?;
+                let value = split
+                    .filter_map(|s| {
+                        if let Some((field, value)) = s.split_once(":") {
+                            Some((field.to_string(), value.to_string().into_bytes()))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                smol::block_on(self.add_map(key.into(), value))?;
+                writeln!(stdout, "Success!")?;
+            }
             "GET_SET" | "get_set" => {
                 let key = split
                     .next()

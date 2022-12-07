@@ -57,6 +57,29 @@ impl KvsNode {
                 self.local_changeset.insert(key);
                 Ok(None)
             }
+            KeyOperation::MapAdd(key, value) => {
+                match self.kvs.entry(key.clone()) {
+                    Entry::Vacant(entry) => {
+                        entry.insert(LatticeValue::SingleCausalMap(
+                            SingleKeyCausalLattice::create_with_default_clock(value),
+                        ));
+                    }
+                    Entry::Occupied(mut entry) => {
+                        if let LatticeValue::SingleCausalMap(set) = entry.get_mut() {
+                            set.reveal_mut().value.merge(&value);
+                            set.reveal_mut().vector_clock.insert(
+                                format!("{}/{}", self.node_id, self.thread_id),
+                                MaxLattice::new(self.gossip_epoch),
+                            )
+                        } else {
+                            return Err(AnnaError::Lattice);
+                        }
+                    }
+                }
+
+                self.local_changeset.insert(key);
+                Ok(None)
+            }
         }
     }
 

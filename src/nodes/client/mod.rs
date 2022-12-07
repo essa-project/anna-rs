@@ -343,6 +343,36 @@ impl ClientNode {
         Ok(request_id)
     }
 
+    /// Starts a request to add the given `lattice` to the given key.
+    ///
+    /// Returns the ID of the request, which can be used to find the matching response.
+    ///
+    /// The request might not be sent immediately. This happens when the client node does not
+    /// which KVS nodes are responsible for the key. In this case, it sends a [`AddressRequest`]
+    /// message to one of the configured routing nodes first.
+    ///
+    /// Each `PUT` request is acknowledged by the KVS node with a [`Response`] message. To receive
+    /// this response, the [`Self::wait_for_matching_response`] or [`Self::receive_async`]
+    /// function can be used.
+    pub async fn add_map_async(
+        &mut self,
+        key: ClientKey,
+        lattice: MapLattice<String, LastWriterWinsLattice<Vec<u8>>>,
+    ) -> eyre::Result<String> {
+        let request_id = self.generate_request_id();
+        let request = ClientRequest {
+            operation: KeyOperation::MapAdd(Key::Client(key), lattice),
+            response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
+            request_id: request_id.clone(),
+            address_cache_size: HashMap::new(),
+            timestamp: Instant::now(),
+        };
+
+        self.try_request(request).await?;
+
+        Ok(request_id)
+    }
+
     /// Requests the value stored for the given key.
     ///
     /// Returns the ID of the request, which can be used to find the matching response.
@@ -570,6 +600,21 @@ impl ClientNode {
             .add_set_async(key, lattice_val)
             .await
             .context("failed to send add_set")?;
+        self.wait_for_matching_response(request_id).await?;
+
+        Ok(())
+    }
+
+    async fn add_map(&mut self, key: ClientKey, map: HashMap<String, Vec<u8>>) -> eyre::Result<()> {
+        let lattice_val: HashMap<String, LastWriterWinsLattice<_>> = map
+            .into_iter()
+            .map(|(k, v)| (k, LastWriterWinsLattice::new_now(v)))
+            .collect();
+
+        let request_id = self
+            .add_map_async(key, MapLattice::new(lattice_val))
+            .await
+            .context("failed to send add_map")?;
         self.wait_for_matching_response(request_id).await?;
 
         Ok(())

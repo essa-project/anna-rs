@@ -1,6 +1,6 @@
 //! Provides the main [`Request`] struct and related types.
 
-use anna_api::lattice::SetLattice;
+use anna_api::lattice::{LastWriterWinsLattice, MapLattice, SetLattice};
 
 use super::response::{Response, ResponseType};
 use crate::{store::LatticeValue, ClientKey, Key};
@@ -86,6 +86,8 @@ pub enum KeyOperation {
     Put(ModifyTuple),
     /// Merge a single-key causal lattice to a key.
     SetAdd(Key, SetLattice<Vec<u8>>),
+    /// Add the value of one or more fields on a a single-key causal hashmap lattice.
+    MapAdd(Key, MapLattice<String, LastWriterWinsLattice<Vec<u8>>>),
 }
 
 impl KeyOperation {
@@ -94,7 +96,8 @@ impl KeyOperation {
         match self {
             KeyOperation::Get(key) => key,
             KeyOperation::Put(t) => &t.key,
-            KeyOperation::SetAdd(t, _) => t,
+            KeyOperation::SetAdd(key, _) => key,
+            KeyOperation::MapAdd(key, _) => key,
         }
     }
 
@@ -104,6 +107,7 @@ impl KeyOperation {
             KeyOperation::Get(_) => ResponseType::Get,
             KeyOperation::Put(_) => ResponseType::Put,
             KeyOperation::SetAdd(..) => ResponseType::SetAdd,
+            KeyOperation::MapAdd(..) => ResponseType::MapAdd,
         }
     }
 }
