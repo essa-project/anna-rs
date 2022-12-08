@@ -80,20 +80,9 @@ impl KvsNode {
 
         let mut addr_keyset_map: HashMap<String, HashSet<Key>> = HashMap::new();
 
-        for key in self.kvs.keys() {
+        for key in self.kvs.keys().cloned().collect::<Vec<Key>>() {
             let threads = self
-                .hash_ring_util
-                .try_get_responsible_threads(
-                    self.wt.replication_response_topic(&self.zenoh_prefix),
-                    key.clone(),
-                    &self.global_hash_rings,
-                    &self.local_hash_rings,
-                    &self.key_replication_map,
-                    ALL_TIERS,
-                    &self.zenoh,
-                    &self.zenoh_prefix,
-                    &mut self.node_connections,
-                )
+                .try_get_responsible_threads(key.clone(), Some(ALL_TIERS))
                 .await?;
 
             if let Some(threads) = threads {

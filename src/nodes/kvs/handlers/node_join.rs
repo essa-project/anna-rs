@@ -1,4 +1,4 @@
-use crate::{hash_ring::tier_name, messages, nodes::kvs::KvsNode, topics::KvsThread};
+use crate::{hash_ring::tier_name, messages, nodes::kvs::KvsNode, topics::KvsThread, Key};
 use eyre::Context;
 use std::time::Instant;
 
@@ -91,20 +91,9 @@ impl KvsNode {
             }
 
             if tier == self.config_data.self_tier {
-                for key in self.kvs.keys() {
+                for key in self.kvs.keys().cloned().collect::<Vec<Key>>() {
                     let threads = self
-                        .hash_ring_util
-                        .try_get_responsible_threads(
-                            self.wt.replication_response_topic(&self.zenoh_prefix),
-                            key.clone(),
-                            &self.global_hash_rings,
-                            &self.local_hash_rings,
-                            &self.key_replication_map,
-                            &[self.config_data.self_tier],
-                            &self.zenoh,
-                            &self.zenoh_prefix,
-                            &mut self.node_connections,
-                        )
+                        .try_get_responsible_threads(key.clone(), None)
                         .await
                         .map_err(|e| eyre::eyre!(e))
                         .context("failed to get responsible threads")?;

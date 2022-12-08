@@ -85,20 +85,7 @@ impl KvsNode {
 
         let key = Key::from(key);
         if self.pending_requests.contains_key(&key) {
-            let threads = self
-                .hash_ring_util
-                .try_get_responsible_threads(
-                    self.wt.replication_response_topic(&self.zenoh_prefix),
-                    key.clone(),
-                    &self.global_hash_rings,
-                    &self.local_hash_rings,
-                    &self.key_replication_map,
-                    &[self.config_data.self_tier],
-                    &self.zenoh,
-                    &self.zenoh_prefix,
-                    &mut self.node_connections,
-                )
-                .await?;
+            let threads = self.try_get_responsible_threads(key.clone(), None).await?;
 
             if let Some(threads) = threads {
                 let responsible = threads.contains(&self.wt);
@@ -165,20 +152,7 @@ impl KvsNode {
         }
 
         if self.pending_gossip.contains_key(&key) {
-            let threads = self
-                .hash_ring_util
-                .try_get_responsible_threads(
-                    self.wt.replication_response_topic(&self.zenoh_prefix),
-                    key.clone(),
-                    &self.global_hash_rings,
-                    &self.local_hash_rings,
-                    &self.key_replication_map,
-                    &[self.config_data.self_tier],
-                    &self.zenoh,
-                    &self.zenoh_prefix,
-                    &mut self.node_connections,
-                )
-                .await?;
+            let threads = self.try_get_responsible_threads(key.clone(), None).await?;
 
             if let Some(threads) = threads {
                 if threads.contains(&self.wt) {
