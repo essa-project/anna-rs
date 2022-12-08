@@ -20,6 +20,7 @@ mod join;
 mod notify;
 
 pub mod cluster_membership;
+pub mod gossip;
 pub mod key_data;
 pub mod management;
 pub mod replication_factor;

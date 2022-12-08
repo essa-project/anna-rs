@@ -1,8 +1,8 @@
 use crate::{
-    messages::{request::RequestData, Request},
+    messages::gossip::GossipRequest,
     nodes::kvs::{KvsNode, PendingGossip},
 };
-use eyre::{bail, Context};
+use eyre::Context;
 use std::{collections::HashMap, time::Instant};
 
 impl KvsNode {
@@ -10,16 +10,11 @@ impl KvsNode {
     pub async fn gossip_handler(&mut self, serialized: &[u8]) -> eyre::Result<()> {
         let work_start = Instant::now();
 
-        let gossip: Request =
+        let gossip: GossipRequest =
             rmp_serde::from_slice(serialized).context("failed to decode key request")?;
         let mut gossip_map: HashMap<_, Vec<_>> = HashMap::new();
 
-        let tuples = match gossip.request {
-            RequestData::Gossip { tuples } => tuples,
-            RequestData::Operation { .. } => {
-                bail!("received gossip request with request type Operation")
-            }
-        };
+        let tuples = gossip.tuples;
 
         for tuple in tuples {
             // first check if the thread is responsible for the key
@@ -91,33 +86,18 @@ mod tests {
     use super::*;
     use crate::{
         lattice::{last_writer_wins::Timestamp, LastWriterWinsLattice, Lattice},
-        messages::request::ModifyTuple,
+        messages::gossip::GossipDataTuple,
         nodes::kvs::kvs_test_instance,
         store::LatticeValue,
-        topics::ClientThread,
         zenoh_test_instance, ClientKey,
     };
 
-    fn put_key_request(
-        key: ClientKey,
-        lattice_value: LatticeValue,
-        node_id: String,
-        zenoh_prefix: &str,
-    ) -> Vec<u8> {
-        let request = Request {
-            request: RequestData::Gossip {
-                tuples: vec![ModifyTuple {
-                    key: key.into(),
-                    value: lattice_value,
-                }],
-            },
-            response_address: Some(
-                ClientThread::new(node_id, 0)
-                    .response_topic(zenoh_prefix)
-                    .to_string(),
-            ),
-            request_id: Some("0".to_owned()),
-            address_cache_size: Default::default(),
+    fn gossip_request(key: ClientKey, lattice_value: LatticeValue) -> Vec<u8> {
+        let request = GossipRequest {
+            tuples: vec![GossipDataTuple {
+                key: key.into(),
+                value: lattice_value,
+            }],
         };
 
         rmp_serde::to_vec(&request).expect("failed to serialize KeyRequest")
@@ -131,14 +111,12 @@ mod tests {
         let key: ClientKey = "key".into();
         let value = "value".as_bytes().to_owned();
 
-        let put_request = put_key_request(
+        let gossip_request = gossip_request(
             key.clone(),
             LatticeValue::Lww(LastWriterWinsLattice::from_pair(
                 Timestamp::now(),
                 value.clone(),
             )),
-            "simple_gossip_receive".to_string(),
-            &zenoh_prefix,
         );
 
         let mut server = kvs_test_instance(zenoh, zenoh_prefix);
@@ -146,7 +124,7 @@ mod tests {
 
         assert_eq!(server.local_changeset.len(), 0);
 
-        smol::block_on(server.gossip_handler(&put_request)).unwrap();
+        smol::block_on(server.gossip_handler(&gossip_request)).unwrap();
 
         assert_eq!(server.pending_gossip.len(), 0);
         let lattice = server.kvs.get(&key.into()).unwrap().as_lww().unwrap();
@@ -175,19 +153,17 @@ mod tests {
             .unwrap();
 
         value = "value2".as_bytes().to_owned();
-        let put_request = put_key_request(
+        let gossip_request = gossip_request(
             key.clone(),
             LatticeValue::Lww(LastWriterWinsLattice::from_pair(
                 Timestamp::now(),
                 value.clone(),
             )),
-            "gossip_update".to_string(),
-            &zenoh_prefix,
         );
 
         assert_eq!(server.local_changeset.len(), 0);
 
-        smol::block_on(server.gossip_handler(&put_request)).unwrap();
+        smol::block_on(server.gossip_handler(&gossip_request)).unwrap();
 
         assert_eq!(server.pending_gossip.len(), 0);
         let lattice = server.kvs.get(&key.into()).unwrap().as_lww().unwrap();

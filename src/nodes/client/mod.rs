@@ -8,8 +8,8 @@ use crate::{
         LastWriterWinsLattice, Lattice, MapLattice, MaxLattice, SetLattice,
     },
     messages::{
-        request::{KeyOperation, ModifyTuple, RequestData},
-        response::{ResponseTuple, ResponseType},
+        request::{KeyOperation, ModifyTuple},
+        response::ResponseTuple,
         AddressRequest, AddressResponse, Request, Response, TcpMessage,
     },
     store::LatticeValue,
@@ -925,28 +925,18 @@ fn generate_bad_response(req: &Request) -> Response {
     Response {
         response_id: req.request_id.clone(),
         error: Err(AnnaError::Timeout),
-        tuples: match req.request.clone() {
-            RequestData::Operation { operations } => operations
-                .into_iter()
-                .map(|key_operation| ResponseTuple {
-                    key: key_operation.key().clone(),
-                    lattice: None,
-                    ty: key_operation.response_ty(),
-                    error: None,
-                    invalidate: false,
-                })
-                .collect(),
-            RequestData::Gossip { tuples } => tuples
-                .into_iter()
-                .map(|t| ResponseTuple {
-                    key: t.key,
-                    lattice: Some(t.value),
-                    ty: ResponseType::Put,
-                    error: None,
-                    invalidate: false,
-                })
-                .collect(),
-        },
+        tuples: req
+            .request
+            .operations
+            .iter()
+            .map(|key_operation| ResponseTuple {
+                key: key_operation.key().clone(),
+                lattice: None,
+                ty: key_operation.response_ty(),
+                error: None,
+                invalidate: false,
+            })
+            .collect(),
     }
 }
 

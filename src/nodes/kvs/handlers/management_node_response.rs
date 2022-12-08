@@ -69,7 +69,7 @@ impl KvsNode {
                 {
                     let response_address = self.wt.cache_ip_response_topic(&self.zenoh_prefix);
                     e.insert(Request {
-                        request: RequestData::Operation {
+                        request: RequestData {
                             operations: vec![KeyOperation::Get(key.into())],
                         },
                         // NB: response_address might not be necessary here

@@ -363,7 +363,7 @@ impl<'a> MonitoringNode<'a> {
             if let hash_map::Entry::Vacant(entry) = addr_request_map.entry(target_address) {
                 let response_addr = self.mt.response_topic(&self.zenoh_prefix);
                 entry.insert(Request {
-                    request: RequestData::Operation {
+                    request: RequestData {
                         operations: vec![KeyOperation::Get(key.clone().into())],
                     },
                     // NB: response_address might not be necessary here
@@ -397,7 +397,7 @@ impl<'a> MonitoringNode<'a> {
             if let hash_map::Entry::Vacant(entry) = addr_request_map.entry(target_address) {
                 let response_addr = self.mt.response_topic(&self.zenoh_prefix);
                 entry.insert(Request {
-                    request: RequestData::Operation {
+                    request: RequestData {
                         operations: vec![KeyOperation::Put(ModifyTuple {
                             key: key.clone().into(),
                             value: LatticeValue::Lww(LastWriterWinsLattice::from_pair(

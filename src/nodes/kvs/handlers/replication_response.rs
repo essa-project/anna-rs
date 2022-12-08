@@ -1,8 +1,8 @@
 use crate::{
     lattice::Lattice,
     messages::{
+        gossip::GossipDataTuple,
         replication_factor::ReplicationFactor,
-        request::ModifyTuple,
         response::{ResponseTuple, ResponseType},
         Response, TcpMessage,
     },
@@ -186,7 +186,7 @@ impl KvsNode {
                         self.kvs.put(key.clone(), gossip.lattice_value.clone())?;
                     }
                 } else {
-                    let mut gossip_map: HashMap<String, Vec<ModifyTuple>> = HashMap::new();
+                    let mut gossip_map: HashMap<String, Vec<GossipDataTuple>> = HashMap::new();
 
                     // forward the gossip
                     for thread in &threads {
@@ -195,7 +195,7 @@ impl KvsNode {
                             .or_default();
 
                         for gossip in self.pending_gossip.remove(&key).unwrap_or_default() {
-                            let tp = ModifyTuple {
+                            let tp = GossipDataTuple {
                                 key: key.clone(),
                                 value: gossip.lattice_value,
                             };

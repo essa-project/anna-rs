@@ -97,7 +97,7 @@ impl KvsNode {
 
         let response_id = request.request_id;
 
-        for tuple in request.request.into_tuples() {
+        for tuple in request.request.operations {
             // first check if the thread is responsible for the key
             let key = tuple.key().clone();
 
@@ -242,7 +242,7 @@ mod tests {
         zenoh_prefix: &str,
     ) -> Request {
         Request {
-            request: RequestData::Operation {
+            request: RequestData {
                 operations: vec![KeyOperation::Get(key.into())],
             },
             response_address: Some(
@@ -263,7 +263,7 @@ mod tests {
         zenoh_prefix: &str,
     ) -> Request {
         Request {
-            request: RequestData::Operation {
+            request: RequestData {
                 operations: vec![KeyOperation::Put(ModifyTuple {
                     key: key.into(),
                     value: lattice_value,

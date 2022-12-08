@@ -197,7 +197,7 @@ impl HashRingUtil {
         let target_address = kvs_thread.request_topic(zenoh_prefix);
 
         let key_request = Request {
-            request: RequestData::Operation {
+            request: RequestData {
                 operations: vec![KeyOperation::Get(replication_key.into())],
             },
             response_address: Some(response_address.to_string()),

@@ -1,9 +1,9 @@
 use super::KvsNode;
 use crate::{
     messages::{
+        gossip::{GossipDataTuple, GossipRequest},
         key_data::{KeySize, KeySizeData},
-        request::{ModifyTuple, RequestData},
-        Request, Tier,
+        Tier,
     },
     nodes::kvs::report::ReportMessage,
     store::LatticeSizeEstimate,
@@ -211,18 +211,13 @@ impl KvsNode {
             let mut tuples = Vec::new();
             for key in keys {
                 if let Some(value) = self.kvs.get(key) {
-                    tuples.push(ModifyTuple {
+                    tuples.push(GossipDataTuple {
                         key: key.clone(),
                         value: value.clone(),
                     });
                 }
             }
-            let request = Request {
-                request: RequestData::Gossip { tuples },
-                response_address: Default::default(),
-                request_id: Default::default(),
-                address_cache_size: Default::default(),
-            };
+            let request = GossipRequest { tuples };
             gossip_map.insert(address, request);
         }
 
@@ -242,15 +237,10 @@ impl KvsNode {
     /// Redirect gossip for the given address
     pub async fn redirect_gossip(
         &self,
-        gossip_map: HashMap<String, Vec<ModifyTuple>>,
+        gossip_map: HashMap<String, Vec<GossipDataTuple>>,
     ) -> eyre::Result<()> {
         for (gossip_address, tuples) in gossip_map {
-            let key_request = Request {
-                request: RequestData::Gossip { tuples },
-                response_address: Default::default(),
-                request_id: Default::default(),
-                address_cache_size: Default::default(),
-            };
+            let key_request = GossipRequest { tuples };
             let serialized =
                 rmp_serde::to_vec(&key_request).context("failed to serialize KeyRequest")?;
             self.zenoh

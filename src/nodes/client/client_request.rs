@@ -32,7 +32,7 @@ pub struct ClientRequest {
 impl From<ClientRequest> for Request {
     fn from(r: ClientRequest) -> Self {
         Request {
-            request: RequestData::Operation {
+            request: RequestData {
                 operations: vec![r.operation],
             },
             response_address: Some(r.response_address),
