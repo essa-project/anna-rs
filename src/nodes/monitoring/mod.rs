@@ -12,7 +12,6 @@ use crate::{
         Request, Response, SelfDepart, Tier,
     },
     metadata::{MetadataKey, TierMetadata},
-    store::LatticeValue,
     topics::{KvsThread, ManagementThread, MonitoringThread, RoutingThread},
     AnnaError, ClientKey, Key, ALL_TIERS,
 };
@@ -397,10 +396,7 @@ impl<'a> MonitoringNode<'a> {
                 entry.insert(Request {
                     request: vec![KeyOperation::PutMetadata(
                         key.clone(),
-                        LatticeValue::Lww(LastWriterWinsLattice::from_pair(
-                            Timestamp::now(),
-                            value,
-                        )),
+                        LastWriterWinsLattice::from_pair(Timestamp::now(), value),
                     )],
                     // NB: response_address might not be necessary here
                     // (or in other places where req_id is constructed either).

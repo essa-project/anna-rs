@@ -32,7 +32,7 @@ impl KvsNode {
             }
             KeyOperation::PutMetadata(key, value) => {
                 let key = Key::Metadata(key);
-                self.kvs.put(key.clone(), value)?;
+                self.kvs.put(key.clone(), LatticeValue::Lww(value))?;
                 self.local_changeset.insert(key);
                 Ok(None)
             }

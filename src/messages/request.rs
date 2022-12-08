@@ -55,7 +55,7 @@ pub enum KeyOperation {
     /// Assign a new value to a client key.
     Put(ClientKey, LatticeValue),
     /// Assign a new value to a metadata key.
-    PutMetadata(MetadataKey, LatticeValue),
+    PutMetadata(MetadataKey, LastWriterWinsLattice<Vec<u8>>),
     /// Merge a single-key causal lattice to a key.
     SetAdd(ClientKey, SetLattice<Vec<u8>>),
     /// Add the value of one or more fields on a a single-key causal hashmap lattice.

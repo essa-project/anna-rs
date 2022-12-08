@@ -8,7 +8,6 @@ use crate::{
         Request, Tier,
     },
     metadata::{KvsMetadataKind, MetadataKey},
-    store::LatticeValue,
     topics::{KvsThread, ManagementThread},
     Key,
 };
@@ -175,7 +174,7 @@ impl ReportData {
         let stat_req = Request {
             request: vec![KeyOperation::PutMetadata(
                 key.clone(),
-                LatticeValue::Lww(LastWriterWinsLattice::from_pair(ts, serialized_stat)),
+                LastWriterWinsLattice::from_pair(ts, serialized_stat),
             )],
             response_address: Default::default(),
             request_id: Default::default(),
@@ -221,7 +220,7 @@ impl ReportData {
         let access_req = Request {
             request: vec![KeyOperation::PutMetadata(
                 key.clone(),
-                LatticeValue::Lww(LastWriterWinsLattice::from_pair(ts, serialized_access)),
+                LastWriterWinsLattice::from_pair(ts, serialized_access),
             )],
             response_address: Default::default(),
             request_id: Default::default(),
@@ -250,7 +249,7 @@ impl ReportData {
         let size_req = Request {
             request: vec![KeyOperation::PutMetadata(
                 key.clone(),
-                LatticeValue::Lww(LastWriterWinsLattice::from_pair(ts, serialized_size)),
+                LastWriterWinsLattice::from_pair(ts, serialized_size),
             )],
             response_address: Default::default(),
             request_id: Default::default(),
