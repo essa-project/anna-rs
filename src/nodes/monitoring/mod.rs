@@ -8,7 +8,7 @@ use crate::{
     messages::{
         management::AddNodes,
         replication_factor::{ReplicationFactor, ReplicationFactorUpdate, ReplicationValue},
-        request::{KeyOperation, ModifyTuple, RequestData},
+        request::KeyOperation,
         Request, Response, SelfDepart, Tier,
     },
     metadata::{MetadataKey, TierMetadata},
@@ -363,9 +363,7 @@ impl<'a> MonitoringNode<'a> {
             if let hash_map::Entry::Vacant(entry) = addr_request_map.entry(target_address) {
                 let response_addr = self.mt.response_topic(&self.zenoh_prefix);
                 entry.insert(Request {
-                    request: RequestData {
-                        operations: vec![KeyOperation::Get(key.clone().into())],
-                    },
+                    request: vec![KeyOperation::GetMetadata(key.clone())],
                     // NB: response_address might not be necessary here
                     // (or in other places where req_id is constructed either).
                     request_id: Some(format!("{}:{}", response_addr, self.request_id)),
@@ -397,15 +395,13 @@ impl<'a> MonitoringNode<'a> {
             if let hash_map::Entry::Vacant(entry) = addr_request_map.entry(target_address) {
                 let response_addr = self.mt.response_topic(&self.zenoh_prefix);
                 entry.insert(Request {
-                    request: RequestData {
-                        operations: vec![KeyOperation::Put(ModifyTuple {
-                            key: key.clone().into(),
-                            value: LatticeValue::Lww(LastWriterWinsLattice::from_pair(
-                                Timestamp::now(),
-                                value,
-                            )),
-                        })],
-                    },
+                    request: vec![KeyOperation::PutMetadata(
+                        key.clone(),
+                        LatticeValue::Lww(LastWriterWinsLattice::from_pair(
+                            Timestamp::now(),
+                            value,
+                        )),
+                    )],
                     // NB: response_address might not be necessary here
                     // (or in other places where req_id is constructed either).
                     request_id: Some(format!("{}:{}", response_addr, self.request_id)),

@@ -8,9 +8,8 @@ use crate::{
         LastWriterWinsLattice, Lattice, MapLattice, MaxLattice, SetLattice,
     },
     messages::{
-        request::{KeyOperation, ModifyTuple},
-        response::ResponseTuple,
-        AddressRequest, AddressResponse, Request, Response, TcpMessage,
+        request::KeyOperation, response::ResponseTuple, AddressRequest, AddressResponse, Request,
+        Response, TcpMessage,
     },
     store::LatticeValue,
     topics::{ClientThread, KvsThread, RoutingThread},
@@ -299,10 +298,7 @@ impl ClientNode {
     ) -> eyre::Result<String> {
         let request_id = self.generate_request_id();
         let request = ClientRequest {
-            operation: KeyOperation::Put(ModifyTuple {
-                key: Key::Client(key),
-                value: lattice,
-            }),
+            operation: KeyOperation::Put(key, lattice),
             response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
             request_id: request_id.clone(),
             address_cache_size: HashMap::new(),
@@ -332,7 +328,7 @@ impl ClientNode {
     ) -> eyre::Result<String> {
         let request_id = self.generate_request_id();
         let request = ClientRequest {
-            operation: KeyOperation::SetAdd(Key::Client(key), lattice),
+            operation: KeyOperation::SetAdd(key, lattice),
             response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
             request_id: request_id.clone(),
             address_cache_size: HashMap::new(),
@@ -362,7 +358,7 @@ impl ClientNode {
     ) -> eyre::Result<String> {
         let request_id = self.generate_request_id();
         let request = ClientRequest {
-            operation: KeyOperation::MapAdd(Key::Client(key), lattice),
+            operation: KeyOperation::MapAdd(key, lattice),
             response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
             request_id: request_id.clone(),
             address_cache_size: HashMap::new(),
@@ -388,7 +384,7 @@ impl ClientNode {
     pub async fn get_async(&mut self, key: ClientKey) -> eyre::Result<String> {
         let request_id = self.generate_request_id();
         let request = ClientRequest {
-            operation: KeyOperation::Get(Key::Client(key)),
+            operation: KeyOperation::Get(key),
             response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
             request_id: request_id.clone(),
             address_cache_size: HashMap::new(),
@@ -735,14 +731,14 @@ impl ClientNode {
             // we only get NULL back for the worker thread if the query to the routing
             // tier timed out, which should never happen.
             let worker = match self
-                .get_worker_thread(key)
+                .get_worker_thread(&key)
                 .await
                 .context("failed to get worker thread")?
             {
                 Some(worker) => worker.clone(),
                 None => {
                     // this means a key addr request is issued asynchronously
-                    if let Some((_, pending)) = self.pending_requests.get_mut(key) {
+                    if let Some((_, pending)) = self.pending_requests.get_mut(&key) {
                         pending.push(request.clone());
                     } else {
                         self.pending_requests
@@ -755,7 +751,7 @@ impl ClientNode {
 
             request
                 .address_cache_size
-                .insert(key.clone(), self.key_address_cache[key].len());
+                .insert(key.clone(), self.key_address_cache[&key].len());
 
             self.send_request(&worker, &request.clone().into())
                 .await
@@ -927,7 +923,6 @@ fn generate_bad_response(req: &Request) -> Response {
         error: Err(AnnaError::Timeout),
         tuples: req
             .request
-            .operations
             .iter()
             .map(|key_operation| ResponseTuple {
                 key: key_operation.key().clone(),

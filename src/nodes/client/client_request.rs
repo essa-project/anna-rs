@@ -1,8 +1,5 @@
 use crate::{
-    messages::{
-        request::{KeyOperation, RequestData},
-        Request,
-    },
+    messages::{request::KeyOperation, Request},
     topics::KvsThread,
     ClientKey,
 };
@@ -32,9 +29,7 @@ pub struct ClientRequest {
 impl From<ClientRequest> for Request {
     fn from(r: ClientRequest) -> Self {
         Request {
-            request: RequestData {
-                operations: vec![r.operation],
-            },
+            request: vec![r.operation],
             response_address: Some(r.response_address),
             request_id: Some(r.request_id),
             address_cache_size: r.address_cache_size,

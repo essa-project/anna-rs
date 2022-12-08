@@ -1,88 +1,17 @@
 use crate::{
-    messages::{request::KeyOperation, response::ResponseTuple, Request, TcpMessage},
+    messages::{response::ResponseTuple, Request, TcpMessage},
     nodes::{
         kvs::{KvsNode, PendingRequest},
         send_tcp_message,
     },
     AnnaError, Key,
 };
-use anna_api::{
-    lattice::{causal::SingleKeyCausalLattice, MaxLattice},
-    LatticeValue,
-};
+
 use eyre::Context;
 use smol::net::TcpStream;
 use std::time::Instant;
 
 impl KvsNode {
-    pub(crate) fn key_operation_handler(
-        &mut self,
-        operation: KeyOperation,
-    ) -> Result<Option<LatticeValue>, AnnaError> {
-        use anna_api::lattice::Lattice;
-        use std::collections::hash_map::Entry;
-
-        match operation {
-            KeyOperation::Get(key) => match self.kvs.get(&key) {
-                Some(value) => Ok(Some(value.clone())),
-                None => Err(AnnaError::KeyDoesNotExist),
-            },
-
-            KeyOperation::Put(tuple) => {
-                let key = tuple.key.clone();
-                self.kvs.put(key.into(), tuple.value.clone())?;
-                self.local_changeset.insert(tuple.key);
-                Ok(Some(tuple.value))
-            }
-            KeyOperation::SetAdd(key, value) => {
-                match self.kvs.entry(key.clone()) {
-                    Entry::Vacant(entry) => {
-                        entry.insert(LatticeValue::SingleCausal(
-                            SingleKeyCausalLattice::create_with_default_clock(value),
-                        ));
-                    }
-                    Entry::Occupied(mut entry) => {
-                        if let LatticeValue::SingleCausal(set) = entry.get_mut() {
-                            set.reveal_mut().value.merge(&value);
-                            set.reveal_mut().vector_clock.insert(
-                                format!("{}/{}", self.node_id, self.thread_id),
-                                MaxLattice::new(self.gossip_epoch),
-                            )
-                        } else {
-                            return Err(AnnaError::Lattice);
-                        }
-                    }
-                }
-
-                self.local_changeset.insert(key);
-                Ok(None)
-            }
-            KeyOperation::MapAdd(key, value) => {
-                match self.kvs.entry(key.clone()) {
-                    Entry::Vacant(entry) => {
-                        entry.insert(LatticeValue::SingleCausalMap(
-                            SingleKeyCausalLattice::create_with_default_clock(value),
-                        ));
-                    }
-                    Entry::Occupied(mut entry) => {
-                        if let LatticeValue::SingleCausalMap(set) = entry.get_mut() {
-                            set.reveal_mut().value.merge(&value);
-                            set.reveal_mut().vector_clock.insert(
-                                format!("{}/{}", self.node_id, self.thread_id),
-                                MaxLattice::new(self.gossip_epoch),
-                            )
-                        } else {
-                            return Err(AnnaError::Lattice);
-                        }
-                    }
-                }
-
-                self.local_changeset.insert(key);
-                Ok(None)
-            }
-        }
-    }
-
     /// Handles incoming request messages.
     pub async fn request_handler(
         &mut self,
@@ -97,7 +26,7 @@ impl KvsNode {
 
         let response_id = request.request_id;
 
-        for tuple in request.request.operations {
+        for tuple in request.request {
             // first check if the thread is responsible for the key
             let key = tuple.key().clone();
 
@@ -207,10 +136,7 @@ mod tests {
             last_writer_wins::Timestamp,
             LastWriterWinsLattice, Lattice, MaxLattice, OrderedSetLattice, SetLattice,
         },
-        messages::{
-            request::{KeyOperation, ModifyTuple, RequestData},
-            Request, Response,
-        },
+        messages::{request::KeyOperation, Request, Response},
         nodes::kvs::kvs_test_instance,
         store::LatticeValue,
         topics::ClientThread,
@@ -229,9 +155,7 @@ mod tests {
         zenoh_prefix: &str,
     ) -> Request {
         Request {
-            request: RequestData {
-                operations: vec![KeyOperation::Get(key.into())],
-            },
+            request: vec![KeyOperation::Get(key.into())],
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)
@@ -250,12 +174,7 @@ mod tests {
         zenoh_prefix: &str,
     ) -> Request {
         Request {
-            request: RequestData {
-                operations: vec![KeyOperation::Put(ModifyTuple {
-                    key: key.into(),
-                    value: lattice_value,
-                })],
-            },
+            request: vec![KeyOperation::Put(key, lattice_value)],
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)

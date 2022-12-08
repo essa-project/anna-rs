@@ -3,7 +3,7 @@
 use anna_api::lattice::{LastWriterWinsLattice, MapLattice, SetLattice};
 
 use super::response::{Response, ResponseType};
-use crate::{store::LatticeValue, ClientKey, Key};
+use crate::{metadata::MetadataKey, store::LatticeValue, ClientKey, Key};
 use std::collections::HashMap;
 
 /// An individual GET or PUT request; each request can batch multiple keys.
@@ -19,7 +19,7 @@ pub struct Request {
     /// key; used for DHT membership change optimization.
     pub address_cache_size: HashMap<ClientKey, usize>,
     /// The type and data of this request.
-    pub request: RequestData,
+    pub request: Vec<KeyOperation>,
 }
 
 impl Request {
@@ -45,36 +45,36 @@ pub struct RequestData {
     pub operations: Vec<KeyOperation>,
 }
 
-/// Describes an assign operation on a specific key.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct ModifyTuple {
-    /// The key that should be updated.
-    pub key: Key,
-    /// The new value that should be merged into the current one.
-    pub value: LatticeValue,
-}
-
 /// Abstraction for a single key operation.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum KeyOperation {
-    /// Get the value of a key.
-    Get(Key),
-    /// Assign a new value to a key.
-    Put(ModifyTuple),
+    /// Get the value of a client key.
+    Get(ClientKey),
+    /// Get the value of a metadat key.
+    GetMetadata(MetadataKey),
+    /// Assign a new value to a client key.
+    Put(ClientKey, LatticeValue),
+    /// Assign a new value to a metadata key.
+    PutMetadata(MetadataKey, LatticeValue),
     /// Merge a single-key causal lattice to a key.
-    SetAdd(Key, SetLattice<Vec<u8>>),
+    SetAdd(ClientKey, SetLattice<Vec<u8>>),
     /// Add the value of one or more fields on a a single-key causal hashmap lattice.
-    MapAdd(Key, MapLattice<String, LastWriterWinsLattice<Vec<u8>>>),
+    MapAdd(
+        ClientKey,
+        MapLattice<String, LastWriterWinsLattice<Vec<u8>>>,
+    ),
 }
 
 impl KeyOperation {
     /// Returns the key that this operation reads/writes.
-    pub fn key(&self) -> &Key {
+    pub fn key(&self) -> Key {
         match self {
-            KeyOperation::Get(key) => key,
-            KeyOperation::Put(t) => &t.key,
-            KeyOperation::SetAdd(key, _) => key,
-            KeyOperation::MapAdd(key, _) => key,
+            KeyOperation::Get(key) => key.clone().into(),
+            KeyOperation::GetMetadata(key) => key.clone().into(),
+            KeyOperation::Put(key, _) => key.clone().into(),
+            KeyOperation::PutMetadata(key, _) => key.clone().into(),
+            KeyOperation::SetAdd(key, _) => key.clone().into(),
+            KeyOperation::MapAdd(key, _) => key.clone().into(),
         }
     }
 
@@ -82,7 +82,9 @@ impl KeyOperation {
     pub fn response_ty(&self) -> ResponseType {
         match self {
             KeyOperation::Get(_) => ResponseType::Get,
-            KeyOperation::Put(_) => ResponseType::Put,
+            KeyOperation::GetMetadata(_) => ResponseType::Get,
+            KeyOperation::Put(..) => ResponseType::Put,
+            KeyOperation::PutMetadata(..) => ResponseType::Put,
             KeyOperation::SetAdd(..) => ResponseType::SetAdd,
             KeyOperation::MapAdd(..) => ResponseType::MapAdd,
         }

@@ -35,6 +35,7 @@ mod gossip;
 mod handlers;
 mod hash_ring_util;
 mod report;
+mod store;
 
 /// Starts a new multithreaded KVS node based on the given config.
 pub fn run(
