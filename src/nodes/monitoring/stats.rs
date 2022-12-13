@@ -1,6 +1,5 @@
 use super::MonitoringNode;
 use crate::{
-    lattice::Lattice,
     messages::{
         key_data::{KeyAccessData, KeySizeData},
         user_feedback::ServerThreadStatistics,
@@ -8,7 +7,6 @@ use crate::{
     },
     metadata::{KvsMetadataKind, MetadataKey},
     nodes::monitoring::{MAX_EBS_NODE_CONSUMPTION, MAX_MEMORY_NODE_CONSUMPTION},
-    store::LatticeValue,
     topics::KvsThread,
     ALL_TIERS,
 };
@@ -109,10 +107,9 @@ impl<'a> MonitoringNode<'a> {
             tuple.error.map(Err).unwrap_or(Ok(()))?;
 
             let key = MetadataKey::try_from(tuple.key).context("expected MetadataKey")?;
-            let value = match &tuple.lattice {
-                Some(LatticeValue::Lww(value)) => value.reveal(),
+            let value = match &tuple.metadata {
+                Some(value) => value,
                 None => bail!("no value in response"),
-                Some(other) => bail!("unexpected response value `{:?}`", other),
             };
 
             match key {
@@ -122,7 +119,7 @@ impl<'a> MonitoringNode<'a> {
                     kind,
                 } => match kind {
                     KvsMetadataKind::ServerStats => {
-                        let stat: ServerThreadStatistics = rmp_serde::from_slice(value.value())
+                        let stat: ServerThreadStatistics = rmp_serde::from_slice(value)
                             .context("failed to deserialize ServerThreadStatistics")?;
 
                         match tier {
@@ -158,7 +155,7 @@ impl<'a> MonitoringNode<'a> {
                         }
                     }
                     KvsMetadataKind::KeyAccess => {
-                        let access: KeyAccessData = rmp_serde::from_slice(value.value())
+                        let access: KeyAccessData = rmp_serde::from_slice(value)
                             .context("failed to deserialize KeyAccessData")?;
 
                         for key_count in access.keys {
@@ -170,7 +167,7 @@ impl<'a> MonitoringNode<'a> {
                         }
                     }
                     KvsMetadataKind::KeySize => {
-                        let key_size_msg: KeySizeData = rmp_serde::from_slice(value.value())
+                        let key_size_msg: KeySizeData = rmp_serde::from_slice(value)
                             .context("failed to deserialize KeySizeData")?;
 
                         for key_size_tuple in key_size_msg.key_sizes {

@@ -1,7 +1,4 @@
-use crate::{
-    lattice::Lattice, messages::Response, metadata::MetadataKey, nodes::kvs::KvsNode, ClientKey,
-    Key,
-};
+use crate::{messages::Response, metadata::MetadataKey, nodes::kvs::KvsNode, ClientKey, Key};
 use eyre::{anyhow, bail, Context};
 use std::{collections::HashSet, time::Instant};
 
@@ -28,14 +25,11 @@ impl KvsNode {
 
                 // Extract the keys that the cache is responsible for.
                 let lww_value = tuple
-                    .lattice
-                    .as_ref()
-                    .ok_or_else(|| anyhow!("lattice not set on cache ip tuple"))?
-                    .as_lww()?;
+                    .metadata
+                    .ok_or_else(|| anyhow!("lattice not set on cache ip tuple"))?;
 
-                let key_set: HashSet<ClientKey> =
-                    rmp_serde::from_slice(lww_value.reveal().value().as_slice())
-                        .context("failed to deserialize StringSet")?;
+                let key_set: HashSet<ClientKey> = rmp_serde::from_slice(lww_value.as_slice())
+                    .context("failed to deserialize StringSet")?;
 
                 // First, update key_to_cache_ips with dropped keys for this cache.
 

@@ -40,6 +40,7 @@ impl KvsNode {
                             let tp = ResponseTuple {
                                 key: key.into(),
                                 lattice: None,
+                                metadata: None,
                                 ty: tuple.response_ty(),
                                 error: Some(AnnaError::WrongThread),
                                 invalidate: Default::default(),
@@ -67,13 +68,17 @@ impl KvsNode {
                     let mut tp = ResponseTuple {
                         key: key.clone(),
                         lattice: None,
+                        metadata: None,
                         ty: tuple.response_ty(),
                         error: None,
                         invalidate: false,
                     };
 
                     match self.key_operation_handler(tuple) {
-                        Ok(value) => tp.lattice = value,
+                        Ok((value, metadata)) => {
+                            tp.lattice = value;
+                            tp.metadata = metadata;
+                        }
                         Err(err) => tp.error = Some(err),
                     }
 
@@ -136,7 +141,7 @@ mod tests {
             last_writer_wins::Timestamp,
             LastWriterWinsLattice, Lattice, MaxLattice, OrderedSetLattice, SetLattice,
         },
-        messages::{request::KeyOperation, Request, Response},
+        messages::{request::KeyOperation, response::ClientResponseValue, Request, Response},
         nodes::kvs::kvs_test_instance,
         store::LatticeValue,
         topics::ClientThread,
@@ -228,7 +233,7 @@ mod tests {
         let rtp = &response.tuples[0];
 
         assert_eq!(rtp.key, key.clone().into());
-        assert_eq!(rtp.lattice.as_ref().unwrap(), &lattice);
+        assert_eq!(rtp.lattice.as_ref().unwrap(), &lattice.into());
         assert_eq!(rtp.error, None);
 
         assert_eq!(server.local_changeset.len(), 0);
@@ -287,7 +292,7 @@ mod tests {
         assert_eq!(rtp.key, key.clone().into());
         assert_eq!(
             rtp.lattice.as_ref().unwrap(),
-            &LatticeValue::Set(set_lattice)
+            &ClientResponseValue::Set(set_lattice.reveal().clone())
         );
         assert_eq!(rtp.error, None);
 
@@ -350,8 +355,8 @@ mod tests {
 
         assert_eq!(rtp.key, key.clone().into());
         assert_eq!(
-            rtp.lattice.as_ref().unwrap().as_ordered_set().unwrap(),
-            &lattice
+            rtp.lattice.as_ref().unwrap(),
+            &ClientResponseValue::OrderedSet(lattice.reveal().clone())
         );
         assert_eq!(rtp.error, None);
 
@@ -419,9 +424,9 @@ mod tests {
 
         assert_eq!(rtp.key, key.clone().into());
 
-        let left_value = rtp.lattice.as_ref().unwrap().as_single_causal().unwrap();
+        let left_value = rtp.lattice.as_ref().unwrap();
 
-        assert_eq!(left_value.reveal(), lattice.reveal());
+        assert_eq!(left_value, &LatticeValue::SingleCausal(lattice).into());
         assert_eq!(rtp.error, None);
 
         assert_eq!(server.local_changeset.len(), 0);
@@ -501,8 +506,8 @@ mod tests {
 
         assert_eq!(rtp.key, key.clone().into());
         assert_eq!(
-            rtp.lattice.as_ref().unwrap().as_lww().unwrap(),
-            &lattice_value
+            rtp.lattice.as_ref().unwrap(),
+            &LatticeValue::Lww(lattice_value).into()
         );
         assert_eq!(rtp.error, None);
 
@@ -585,7 +590,7 @@ mod tests {
         let rtp = &response.tuples[0];
 
         assert_eq!(rtp.key, key.clone().into());
-        assert_eq!(rtp.lattice.as_ref().unwrap().as_set().unwrap().reveal(), &s);
+        assert_eq!(rtp.lattice.as_ref().unwrap(), &ClientResponseValue::Set(s));
         assert_eq!(rtp.error, None);
 
         assert_eq!(server.local_changeset.len(), 1);
@@ -668,13 +673,8 @@ mod tests {
 
         assert_eq!(rtp.key, key.clone().into());
         assert_eq!(
-            rtp.lattice
-                .as_ref()
-                .unwrap()
-                .as_ordered_set()
-                .unwrap()
-                .reveal(),
-            &s
+            rtp.lattice.as_ref().unwrap(),
+            &ClientResponseValue::OrderedSet(s)
         );
         assert_eq!(rtp.error, None);
 
@@ -764,9 +764,9 @@ mod tests {
 
         assert_eq!(rtp.key, key.clone().into());
 
-        let left_value = rtp.lattice.as_ref().unwrap().as_single_causal().unwrap();
+        let left_value = rtp.lattice.as_ref().unwrap();
 
-        assert_eq!(left_value.reveal(), lattice.reveal());
+        assert_eq!(left_value, &LatticeValue::SingleCausal(lattice).into());
         assert_eq!(rtp.error, None);
 
         assert_eq!(server.local_changeset.len(), 1);

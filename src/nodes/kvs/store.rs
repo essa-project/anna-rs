@@ -3,7 +3,10 @@ use anna_api::{
     AnnaError, LatticeValue,
 };
 
-use crate::{messages::request::KeyOperation, Key};
+use crate::{
+    messages::{request::KeyOperation, response::ClientResponseValue},
+    Key,
+};
 
 use super::KvsNode;
 
@@ -11,30 +14,34 @@ impl KvsNode {
     pub(crate) fn key_operation_handler(
         &mut self,
         operation: KeyOperation,
-    ) -> Result<Option<LatticeValue>, AnnaError> {
+    ) -> Result<(Option<ClientResponseValue>, Option<Vec<u8>>), AnnaError> {
         use anna_api::lattice::Lattice;
         use std::collections::hash_map::Entry;
 
         match operation {
             KeyOperation::Get(key) => match self.kvs.get(&key.into()) {
-                Some(value) => Ok(Some(value.clone())),
+                Some(value) => Ok((Some(value.clone().into()), None)),
                 None => Err(AnnaError::KeyDoesNotExist),
             },
-            KeyOperation::GetMetadata(key) => match self.kvs.get(&key.into()) {
-                Some(value) => Ok(Some(value.clone())),
+            KeyOperation::GetMetadata(key) => match self.kvs.get(&key.clone().into()) {
+                Some(LatticeValue::Lww(lww)) => Ok((None, Some(lww.reveal().value().clone()))),
+                Some(_) => {
+                    log::warn!("Get a metadata type is not Lww by key {key:?}");
+                    Err(AnnaError::Lattice)
+                }
                 None => Err(AnnaError::KeyDoesNotExist),
             },
             KeyOperation::Put(key, value) => {
                 let key = Key::Client(key);
                 self.kvs.put(key.clone(), value.clone())?;
                 self.local_changeset.insert(key);
-                Ok(None)
+                Ok((None, None))
             }
             KeyOperation::PutMetadata(key, value) => {
                 let key = Key::Metadata(key);
                 self.kvs.put(key.clone(), LatticeValue::Lww(value))?;
                 self.local_changeset.insert(key);
-                Ok(None)
+                Ok((None, None))
             }
             KeyOperation::SetAdd(key, value) => {
                 let key = Key::Client(key);
@@ -59,7 +66,7 @@ impl KvsNode {
                 }
 
                 self.local_changeset.insert(key);
-                Ok(None)
+                Ok((None, None))
             }
             KeyOperation::MapAdd(key, value) => {
                 let key = Key::Client(key);
@@ -84,7 +91,7 @@ impl KvsNode {
                 }
 
                 self.local_changeset.insert(key);
-                Ok(None)
+                Ok((None, None))
             }
         }
     }

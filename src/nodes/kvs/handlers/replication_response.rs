@@ -1,5 +1,4 @@
 use crate::{
-    lattice::Lattice,
     messages::{
         gossip::GossipDataTuple,
         replication_factor::ReplicationFactor,
@@ -39,14 +38,12 @@ impl KvsNode {
         match tuple.error {
             None => {
                 let lww_value = tuple
-                    .lattice
+                    .metadata
                     .as_ref()
-                    .ok_or_else(|| anyhow!("tuple lattice is None in replication response"))?
-                    .as_lww()?;
+                    .ok_or_else(|| anyhow!("tuple lattice is None in replication response"))?;
 
-                let rep_data: ReplicationFactor =
-                    rmp_serde::from_slice(lww_value.reveal().value().as_slice())
-                        .context("failed to decode replication factor")?;
+                let rep_data: ReplicationFactor = rmp_serde::from_slice(lww_value)
+                    .context("failed to decode replication factor")?;
 
                 for global in &rep_data.global {
                     self.key_replication_map
@@ -100,13 +97,17 @@ impl KvsNode {
                             let mut tp = ResponseTuple {
                                 key: key.clone(),
                                 lattice: None,
+                                metadata: None,
                                 ty: request.operation.response_ty(),
                                 error: None,
                                 invalidate: false,
                             };
 
                             match self.key_operation_handler(request.operation) {
-                                Ok(lattice) => tp.lattice = lattice,
+                                Ok((lattice, metadata)) => {
+                                    tp.lattice = lattice;
+                                    tp.metadata = metadata;
+                                }
                                 Err(error) => tp.error = Some(error),
                             }
                             response.tuples.push(tp);
@@ -116,6 +117,7 @@ impl KvsNode {
                             let tp = ResponseTuple {
                                 key: key.clone(),
                                 lattice: None,
+                                metadata: None,
                                 ty: request.operation.response_ty(),
                                 error: Some(AnnaError::WrongThread),
                                 invalidate: false,

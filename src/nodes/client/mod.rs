@@ -8,8 +8,9 @@ use crate::{
         LastWriterWinsLattice, Lattice, MapLattice, MaxLattice, SetLattice,
     },
     messages::{
-        request::KeyOperation, response::ResponseTuple, AddressRequest, AddressResponse, Request,
-        Response, TcpMessage,
+        request::KeyOperation,
+        response::{ClientResponseValue, ResponseTuple},
+        AddressRequest, AddressResponse, Request, Response, TcpMessage,
     },
     store::LatticeValue,
     topics::{ClientThread, KvsThread, RoutingThread},
@@ -35,7 +36,6 @@ use zenoh::prelude::SplitBuffer;
 use super::{receive_tcp_message, send_tcp_message};
 
 mod client_request;
-mod display;
 mod interactive;
 
 /// Client nodes interact with KVS nodes to serve user requests.
@@ -271,7 +271,7 @@ impl ClientNode {
     ///
     /// **Note:** This method drops all unknown responses, so be careful when using this method
     /// together with the `*_async` methods.
-    pub async fn get(&mut self, key: ClientKey) -> eyre::Result<LatticeValue> {
+    pub async fn get(&mut self, key: ClientKey) -> eyre::Result<ClientResponseValue> {
         let request_id = self.get_async(key).await?;
         let tuple = self.wait_for_matching_response(request_id).await?;
 
@@ -567,7 +567,10 @@ impl ClientNode {
 
     async fn get_lww(&mut self, key: ClientKey) -> eyre::Result<Vec<u8>> {
         let lattice = self.get(key).await?;
-        Ok(lattice.into_lww()?.into_revealed().into_value())
+        match lattice {
+            ClientResponseValue::Bytes(bytes) => Ok(bytes),
+            other => Err(anyhow!("expected a bytes, got `{:?}`", other)),
+        }
     }
 
     async fn put_lww(&mut self, key: ClientKey, value: Vec<u8>) -> eyre::Result<()> {
@@ -583,11 +586,10 @@ impl ClientNode {
     async fn get_set(&mut self, key: ClientKey) -> eyre::Result<HashSet<Vec<u8>>> {
         let lattice = self.get(key).await?;
 
-        Ok(lattice
-            .into_single_causal()?
-            .into_revealed()
-            .value
-            .into_revealed())
+        match lattice {
+            ClientResponseValue::Set(set) => Ok(set),
+            other => Err(anyhow!("expected a set, got `{:?}`", other)),
+        }
     }
 
     async fn add_set(&mut self, key: ClientKey, set: HashSet<Vec<u8>>) -> eyre::Result<()> {
@@ -600,6 +602,15 @@ impl ClientNode {
         self.wait_for_matching_response(request_id).await?;
 
         Ok(())
+    }
+
+    async fn get_map(&mut self, key: ClientKey) -> eyre::Result<HashMap<String, Vec<u8>>> {
+        let lattice = self.get(key).await?;
+
+        match lattice {
+            ClientResponseValue::Map(map) => Ok(map),
+            other => Err(anyhow!("expected a map, got `{:?}`", other)),
+        }
     }
 
     async fn add_map(&mut self, key: ClientKey, map: HashMap<String, Vec<u8>>) -> eyre::Result<()> {
@@ -622,8 +633,10 @@ impl ClientNode {
         key: ClientKey,
     ) -> eyre::Result<MultiKeyCausalPayload<SetLattice<Vec<u8>>>> {
         let lattice = self.get(key).await?;
-
-        Ok(lattice.into_multi_causal()?.into_revealed())
+        match lattice {
+            ClientResponseValue::MultiCausal(val) => Ok(val.into_revealed()),
+            other => Err(anyhow!("expected MultiCausal lattice, got `{:?}`", other)),
+        }
     }
 
     // currently this mode is only for testing purpose
@@ -927,6 +940,7 @@ fn generate_bad_response(req: &Request) -> Response {
             .map(|key_operation| ResponseTuple {
                 key: key_operation.key().clone(),
                 lattice: None,
+                metadata: None,
                 ty: key_operation.response_ty(),
                 error: None,
                 invalidate: false,
