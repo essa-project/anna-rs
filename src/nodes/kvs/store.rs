@@ -1,11 +1,8 @@
-use anna_api::{
-    lattice::{causal::SingleKeyCausalLattice, MaxLattice},
-    AnnaError, LatticeValue,
-};
-
 use crate::{
+    lattice::{causal::SingleKeyCausalLattice, Lattice, MaxLattice},
     messages::{request::KeyOperation, response::ClientResponseValue},
-    Key,
+    store::LatticeValue,
+    AnnaError, Key,
 };
 
 use super::KvsNode;
@@ -15,7 +12,6 @@ impl KvsNode {
         &mut self,
         operation: KeyOperation,
     ) -> Result<(Option<ClientResponseValue>, Option<Vec<u8>>), AnnaError> {
-        use anna_api::lattice::Lattice;
         use std::collections::hash_map::Entry;
 
         match operation {

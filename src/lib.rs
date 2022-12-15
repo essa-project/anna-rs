@@ -23,7 +23,7 @@
 
 use std::sync::Arc;
 
-pub use anna_api::{lattice, AnnaError, ClientKey};
+pub use anna_api::{AnnaError, ClientKey};
 use eyre::anyhow;
 use messages::Tier;
 use metadata::MetadataKey;
@@ -33,6 +33,7 @@ pub mod nodes;
 
 pub mod config;
 pub mod hash_ring;
+pub mod lattice;
 pub mod messages;
 pub mod metadata;
 pub mod store;

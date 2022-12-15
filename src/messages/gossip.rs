@@ -1,6 +1,6 @@
 //! Messages related to gossip.
 
-use anna_api::LatticeValue;
+use crate::store::LatticeValue;
 
 use crate::Key;
 

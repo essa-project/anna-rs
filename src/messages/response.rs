@@ -74,7 +74,7 @@ pub enum ClientResponseValue {
 
 impl From<LatticeValue> for ClientResponseValue {
     fn from(lattice: LatticeValue) -> Self {
-        use anna_api::lattice::Lattice;
+        use crate::lattice::Lattice;
         match lattice {
             LatticeValue::Lww(value) => ClientResponseValue::Bytes(value.reveal().value().clone()),
             LatticeValue::Set(value) => ClientResponseValue::Set(value.reveal().clone()),

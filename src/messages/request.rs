@@ -1,9 +1,12 @@
 //! Provides the main [`Request`] struct and related types.
 
-use anna_api::lattice::{LastWriterWinsLattice, MapLattice, SetLattice};
-
 use super::response::{Response, ResponseType};
-use crate::{metadata::MetadataKey, store::LatticeValue, ClientKey, Key};
+use crate::{
+    lattice::{LastWriterWinsLattice, MapLattice, SetLattice},
+    metadata::MetadataKey,
+    store::LatticeValue,
+    ClientKey, Key,
+};
 use std::collections::HashMap;
 
 /// An individual GET or PUT request; each request can batch multiple keys.
