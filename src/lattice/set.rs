@@ -7,7 +7,7 @@ use std::{collections::HashSet, hash::Hash};
 /// ## Example
 ///
 /// ```
-/// use anna_api::lattice::{Lattice, SetLattice};
+/// use anna::lattice::{Lattice, SetLattice};
 /// use std::collections::HashSet;
 ///
 /// // initialize a new SetLattice with a few items

@@ -4,7 +4,6 @@ use self::stats::SummaryStats;
 use crate::{
     config::Config,
     hash_ring::{tier_name, GlobalHashRing, HashRingUtil, KeyReplication, LocalHashRing},
-    lattice::{last_writer_wins::Timestamp, LastWriterWinsLattice},
     messages::{
         management::AddNodes,
         replication_factor::{ReplicationFactor, ReplicationFactorUpdate, ReplicationValue},
@@ -368,6 +367,7 @@ impl<'a> MonitoringNode<'a> {
                     request_id: Some(format!("{}:{}", response_addr, self.request_id)),
                     response_address: Some(response_addr.to_string()),
                     address_cache_size: Default::default(),
+                    timestamp: chrono::Utc::now(),
                 });
                 self.request_id += 1;
             }
@@ -394,15 +394,13 @@ impl<'a> MonitoringNode<'a> {
             if let hash_map::Entry::Vacant(entry) = addr_request_map.entry(target_address) {
                 let response_addr = self.mt.response_topic(&self.zenoh_prefix);
                 entry.insert(Request {
-                    request: vec![KeyOperation::PutMetadata(
-                        key.clone(),
-                        LastWriterWinsLattice::from_pair(Timestamp::now(), value),
-                    )],
+                    request: vec![KeyOperation::PutMetadata(key.clone(), value)],
                     // NB: response_address might not be necessary here
                     // (or in other places where req_id is constructed either).
                     request_id: Some(format!("{}:{}", response_addr, self.request_id)),
                     response_address: Some(response_addr.to_string()),
                     address_cache_size: Default::default(),
+                    timestamp: chrono::Utc::now(),
                 });
                 self.request_id += 1;
             }

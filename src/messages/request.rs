@@ -1,13 +1,8 @@
 //! Provides the main [`Request`] struct and related types.
 
 use super::response::{Response, ResponseType};
-use crate::{
-    lattice::{LastWriterWinsLattice, MapLattice, SetLattice},
-    metadata::MetadataKey,
-    store::LatticeValue,
-    ClientKey, Key,
-};
-use std::collections::HashMap;
+use crate::{metadata::MetadataKey, ClientKey, Key};
+use std::collections::{HashMap, HashSet};
 
 /// An individual GET or PUT request; each request can batch multiple keys.
 ///
@@ -23,6 +18,8 @@ pub struct Request {
     pub address_cache_size: HashMap<ClientKey, usize>,
     /// The type and data of this request.
     pub request: Vec<KeyOperation>,
+    /// The request creation time.
+    pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
 impl Request {
@@ -56,16 +53,13 @@ pub enum KeyOperation {
     /// Get the value of a metadat key.
     GetMetadata(MetadataKey),
     /// Assign a new value to a client key.
-    Put(ClientKey, LatticeValue),
+    Put(ClientKey, Vec<u8>),
     /// Assign a new value to a metadata key.
-    PutMetadata(MetadataKey, LastWriterWinsLattice<Vec<u8>>),
+    PutMetadata(MetadataKey, Vec<u8>),
     /// Merge a single-key causal lattice to a key.
-    SetAdd(ClientKey, SetLattice<Vec<u8>>),
+    SetAdd(ClientKey, HashSet<Vec<u8>>),
     /// Add the value of one or more fields on a a single-key causal hashmap lattice.
-    MapAdd(
-        ClientKey,
-        MapLattice<String, LastWriterWinsLattice<Vec<u8>>>,
-    ),
+    MapAdd(ClientKey, HashMap<String, Vec<u8>>),
 }
 
 impl KeyOperation {

@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 /// ## Example
 ///
 /// ```
-/// use anna_api::lattice::{Lattice, OrderedSetLattice};
+/// use anna::lattice::{Lattice, OrderedSetLattice};
 /// use std::collections::BTreeSet;
 ///
 /// // initialize a new SetLattice with a few items

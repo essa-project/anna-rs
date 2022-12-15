@@ -1,5 +1,9 @@
 use crate::{
-    lattice::{causal::SingleKeyCausalLattice, Lattice, MaxLattice},
+    lattice::{
+        causal::SingleKeyCausalLattice,
+        last_writer_wins::{Timestamp, TimestampValuePair},
+        LastWriterWinsLattice, Lattice, MapLattice, MaxLattice, SetLattice,
+    },
     messages::{request::KeyOperation, response::ClientResponseValue},
     store::LatticeValue,
     AnnaError, Key,
@@ -11,6 +15,7 @@ impl KvsNode {
     pub(crate) fn key_operation_handler(
         &mut self,
         operation: KeyOperation,
+        timestamp: chrono::DateTime<chrono::Utc>,
     ) -> Result<(Option<ClientResponseValue>, Option<Vec<u8>>), AnnaError> {
         use std::collections::hash_map::Entry;
 
@@ -29,18 +34,31 @@ impl KvsNode {
             },
             KeyOperation::Put(key, value) => {
                 let key = Key::Client(key);
-                self.kvs.put(key.clone(), value.clone())?;
+                self.kvs.put(
+                    key.clone(),
+                    LatticeValue::Lww(LastWriterWinsLattice::new(TimestampValuePair::new(
+                        Timestamp(timestamp),
+                        value,
+                    ))),
+                )?;
                 self.local_changeset.insert(key);
                 Ok((None, None))
             }
             KeyOperation::PutMetadata(key, value) => {
                 let key = Key::Metadata(key);
-                self.kvs.put(key.clone(), LatticeValue::Lww(value))?;
+                self.kvs.put(
+                    key.clone(),
+                    LatticeValue::Lww(LastWriterWinsLattice::new(TimestampValuePair::new(
+                        Timestamp(timestamp),
+                        value,
+                    ))),
+                )?;
                 self.local_changeset.insert(key);
                 Ok((None, None))
             }
             KeyOperation::SetAdd(key, value) => {
                 let key = Key::Client(key);
+                let value = SetLattice::new(value);
 
                 match self.kvs.entry(key.clone()) {
                     Entry::Vacant(entry) => {
@@ -66,6 +84,20 @@ impl KvsNode {
             }
             KeyOperation::MapAdd(key, value) => {
                 let key = Key::Client(key);
+                let value = MapLattice::new(
+                    value
+                        .into_iter()
+                        .map(|(k, v)| {
+                            (
+                                k,
+                                LastWriterWinsLattice::new(TimestampValuePair::new(
+                                    Timestamp(timestamp),
+                                    v,
+                                )),
+                            )
+                        })
+                        .collect(),
+                );
 
                 match self.kvs.entry(key.clone()) {
                     Entry::Vacant(entry) => {

@@ -8,7 +8,7 @@ use std::ops;
 /// The merge operation results in the maximum:
 ///
 /// ```
-/// use anna_api::lattice::{Lattice, MaxLattice};
+/// use anna::lattice::{Lattice, MaxLattice};
 ///
 /// let mut lattice = MaxLattice::new(4);
 /// assert_eq!(lattice.reveal(), &4);
@@ -24,7 +24,7 @@ use std::ops;
 /// can be manipulated through the `+` and `-` operators:
 ///
 /// ```
-/// use anna_api::lattice::{Lattice, MaxLattice};
+/// use anna::lattice::{Lattice, MaxLattice};
 ///
 /// let mut lattice = MaxLattice::new(48);
 /// assert_eq!(lattice.reveal(), &48);

@@ -2,17 +2,11 @@
 
 pub use self::interactive::run_interactive;
 use crate::{
-    lattice::{
-        causal::{MultiKeyCausalLattice, MultiKeyCausalPayload, VectorClock},
-        last_writer_wins::Timestamp,
-        LastWriterWinsLattice, Lattice, MapLattice, MaxLattice, SetLattice,
-    },
     messages::{
         request::KeyOperation,
         response::{ClientResponseValue, ResponseTuple},
         AddressRequest, AddressResponse, Request, Response, TcpMessage,
     },
-    store::LatticeValue,
     topics::{ClientThread, KvsThread, RoutingThread},
     AnnaError, ClientKey, Key,
 };
@@ -242,26 +236,6 @@ impl ClientNode {
         Ok(())
     }
 
-    /// Sets the given key to the given [`LatticeValue`].
-    ///
-    /// Awaits until the KVS acknowledges the operation before returning. This means that this
-    /// method only returns after the value was written to the KVS.
-    ///
-    /// To only send out the `PUT` request without waiting for acknowledgement use the
-    /// [`Self::put_async`] method.
-    ///
-    /// **Note:** This method drops all unknown responses, so be careful when using this method
-    /// together with the `*_async` methods.
-    pub async fn put(&mut self, key: ClientKey, value: LatticeValue) -> eyre::Result<()> {
-        let request_id = self
-            .put_async(key, value)
-            .await
-            .context("failed to send put")?;
-        self.wait_for_matching_response(request_id).await?;
-
-        Ok(())
-    }
-
     /// Returns the value stored for the given key.
     ///
     /// Awaits until the KVS sends the requested value.
@@ -280,7 +254,7 @@ impl ClientNode {
             .ok_or_else(|| anyhow!("response has no lattice value in tuple"))
     }
 
-    /// Starts a request to set the given key to the given [`LatticeValue`].
+    /// Starts a request to add the given [`Vec<u8>`] to the given key, that value is a [`LastWriteWinlattice<Vec<u8>>`][crate::lattice::LastWriterWinsLattice].
     ///
     /// Returns the ID of the request, which can be used to find the matching response.
     ///
@@ -291,14 +265,10 @@ impl ClientNode {
     /// Each `PUT` request is acknowledged by the KVS node with a [`Response`] message. To receive
     /// this response, the [`Self::wait_for_matching_response`] or [`Self::receive_async`]
     /// function can be used.
-    pub async fn put_async(
-        &mut self,
-        key: ClientKey,
-        lattice: LatticeValue,
-    ) -> eyre::Result<String> {
+    pub async fn put_lww_async(&mut self, key: ClientKey, bytes: Vec<u8>) -> eyre::Result<String> {
         let request_id = self.generate_request_id();
         let request = ClientRequest {
-            operation: KeyOperation::Put(key, lattice),
+            operation: KeyOperation::Put(key, bytes),
             response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
             request_id: request_id.clone(),
             address_cache_size: HashMap::new(),
@@ -310,7 +280,7 @@ impl ClientNode {
         Ok(request_id)
     }
 
-    /// Starts a request to add the given [`SetLattice<Vec<u8>>`] to the given key.
+    /// Starts a request to add the given [`HashSet<Vec<u8>>`] to the given key, that value is a Set.
     ///
     /// Returns the ID of the request, which can be used to find the matching response.
     ///
@@ -324,7 +294,7 @@ impl ClientNode {
     pub async fn add_set_async(
         &mut self,
         key: ClientKey,
-        lattice: SetLattice<Vec<u8>>,
+        lattice: HashSet<Vec<u8>>,
     ) -> eyre::Result<String> {
         let request_id = self.generate_request_id();
         let request = ClientRequest {
@@ -354,7 +324,7 @@ impl ClientNode {
     pub async fn add_map_async(
         &mut self,
         key: ClientKey,
-        lattice: MapLattice<String, LastWriterWinsLattice<Vec<u8>>>,
+        lattice: HashMap<String, Vec<u8>>,
     ) -> eyre::Result<String> {
         let request_id = self.generate_request_id();
         let request = ClientRequest {
@@ -574,12 +544,9 @@ impl ClientNode {
     }
 
     async fn put_lww(&mut self, key: ClientKey, value: Vec<u8>) -> eyre::Result<()> {
-        let lattice_val = LastWriterWinsLattice::from_pair(Timestamp::now(), value);
-
-        self.put(key, LatticeValue::Lww(lattice_val))
+        self.put_lww_async(key, value)
             .await
-            .context("put failed")?;
-
+            .context("failed to send put_lww")?;
         Ok(())
     }
 
@@ -593,10 +560,8 @@ impl ClientNode {
     }
 
     async fn add_set(&mut self, key: ClientKey, set: HashSet<Vec<u8>>) -> eyre::Result<()> {
-        let lattice_val = SetLattice::new(set);
-
         let request_id = self
-            .add_set_async(key, lattice_val)
+            .add_set_async(key, set)
             .await
             .context("failed to send add_set")?;
         self.wait_for_matching_response(request_id).await?;
@@ -614,61 +579,11 @@ impl ClientNode {
     }
 
     async fn add_map(&mut self, key: ClientKey, map: HashMap<String, Vec<u8>>) -> eyre::Result<()> {
-        let lattice_val: HashMap<String, LastWriterWinsLattice<_>> = map
-            .into_iter()
-            .map(|(k, v)| (k, LastWriterWinsLattice::new_now(v)))
-            .collect();
-
         let request_id = self
-            .add_map_async(key, MapLattice::new(lattice_val))
+            .add_map_async(key, map)
             .await
             .context("failed to send add_map")?;
         self.wait_for_matching_response(request_id).await?;
-
-        Ok(())
-    }
-
-    async fn get_causal(
-        &mut self,
-        key: ClientKey,
-    ) -> eyre::Result<MultiKeyCausalPayload<SetLattice<Vec<u8>>>> {
-        let lattice = self.get(key).await?;
-        match lattice {
-            ClientResponseValue::MultiCausal(val) => Ok(val.into_revealed()),
-            other => Err(anyhow!("expected MultiCausal lattice, got `{:?}`", other)),
-        }
-    }
-
-    // currently this mode is only for testing purpose
-    async fn put_causal(&mut self, key: ClientKey, value: Vec<u8>) -> eyre::Result<()> {
-        // construct a test client id - version pair
-        let vector_clock = {
-            let mut vector_clock = VectorClock::default();
-            vector_clock.insert("test".into(), MaxLattice::new(1));
-            vector_clock
-        };
-        // construct one test dependencies
-        let dependencies = {
-            let mut dependencies = MapLattice::default();
-            dependencies.insert("dep1".into(), {
-                let mut clock = VectorClock::default();
-                clock.insert("test1".into(), MaxLattice::new(1));
-                clock
-            });
-            dependencies
-        };
-        // populate the value
-        let value = {
-            let mut map = SetLattice::default();
-            map.insert(value);
-            map
-        };
-        let mkcp = MultiKeyCausalPayload::new(vector_clock, dependencies, value);
-        let mkcl = MultiKeyCausalLattice::new(mkcp);
-
-        self.put(key, LatticeValue::MultiCausal(mkcl))
-            .await
-            .context("put failed")?;
 
         Ok(())
     }

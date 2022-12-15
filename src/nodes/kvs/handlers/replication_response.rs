@@ -103,7 +103,7 @@ impl KvsNode {
                                 invalidate: false,
                             };
 
-                            match self.key_operation_handler(request.operation) {
+                            match self.key_operation_handler(request.operation, request.timestamp) {
                                 Ok((lattice, metadata)) => {
                                     tp.lattice = lattice;
                                     tp.metadata = metadata;
@@ -139,7 +139,8 @@ impl KvsNode {
                     } else if responsible {
                         // only put requests should fall into this category
                         if request.operation.response_ty() == ResponseType::Put {
-                            let _ = self.key_operation_handler(request.operation);
+                            let _ =
+                                self.key_operation_handler(request.operation, request.timestamp);
                             self.report_data.record_key_access(&key, now);
                         } else {
                             log::error!("Received a GET request with no response address.");

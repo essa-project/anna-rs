@@ -1,5 +1,5 @@
 use super::ClientNode;
-use crate::{config::Config, lattice::Lattice, nodes::request_cluster_info, topics::RoutingThread};
+use crate::{config::Config, nodes::request_cluster_info, topics::RoutingThread};
 use eyre::{anyhow, bail, Context};
 use std::{
     collections::HashMap,
@@ -239,52 +239,6 @@ impl ClientNode {
                 log::trace!("[OK] Got {:?} from GET_HASHMAP", map);
 
                 writeln!(stdout, "{:#?}", map)?;
-            }
-            "PUT_CAUSAL" | "put_causal" => {
-                let key = split
-                    .next()
-                    .ok_or_else(|| anyhow!("missing key and value arguments"))?;
-                let value = split
-                    .next()
-                    .ok_or_else(|| anyhow!("missing value argument"))?;
-                if let Some(extra) = split.next() {
-                    bail!("unexpected argument `{}`", extra);
-                }
-
-                smol::block_on(self.put_causal(key.into(), value.to_owned().into_bytes()))?;
-                writeln!(stdout, "Success!")?;
-            }
-            "GET_CAUSAL" | "get_causal" => {
-                let key = split
-                    .next()
-                    .ok_or_else(|| anyhow!("missing key argument"))?;
-                if let Some(extra) = split.next() {
-                    bail!("unexpected argument `{}`", extra);
-                }
-
-                let mkcl = smol::block_on(self.get_causal(key.into()))?;
-
-                for (k, v) in mkcl.vector_clock.reveal() {
-                    writeln!(stdout, "{{{} : {}}}", k, v.reveal())?;
-                }
-
-                for (k, v) in mkcl.dependencies.reveal() {
-                    write!(stdout, "{} : ", k)?;
-                    for vc_pair in v.reveal() {
-                        writeln!(stdout, "{{{} : {}}}", vc_pair.0, vc_pair.1.reveal())?;
-                    }
-                }
-
-                let values = mkcl
-                    .value
-                    .reveal()
-                    .iter()
-                    .map(|v| String::from_utf8(v.to_owned()))
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                assert_eq!(values.len(), 1);
-
-                writeln!(stdout, "{}", values[0])?;
             }
             other => bail!("unrecognized command `{}`.{}", other, HELP),
         }

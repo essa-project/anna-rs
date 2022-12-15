@@ -1,5 +1,5 @@
 use crate::{
-    lattice::{last_writer_wins::Timestamp, LastWriterWinsLattice},
+    lattice::last_writer_wins::Timestamp,
     messages::{
         key_data::{KeyAccessData, KeyCount, KeySizeData},
         management::FuncNodesQuery,
@@ -172,13 +172,11 @@ impl ReportData {
         let serialized_stat =
             rmp_serde::to_vec(&stat).context("failed to serialize ServerThreadStatistics")?;
         let stat_req = Request {
-            request: vec![KeyOperation::PutMetadata(
-                key.clone(),
-                LastWriterWinsLattice::from_pair(ts, serialized_stat),
-            )],
+            request: vec![KeyOperation::PutMetadata(key.clone(), serialized_stat)],
             response_address: Default::default(),
             request_id: Default::default(),
             address_cache_size: Default::default(),
+            timestamp: ts.0.clone(),
         };
         Ok(ReportMessage {
             key,
@@ -218,13 +216,11 @@ impl ReportData {
         let serialized_access =
             rmp_serde::to_vec(&access).context("failed to serialize KeyAccessData")?;
         let access_req = Request {
-            request: vec![KeyOperation::PutMetadata(
-                key.clone(),
-                LastWriterWinsLattice::from_pair(ts, serialized_access),
-            )],
+            request: vec![KeyOperation::PutMetadata(key.clone(), serialized_access)],
             response_address: Default::default(),
             request_id: Default::default(),
             address_cache_size: Default::default(),
+            timestamp: ts.0.clone(),
         };
         Ok(ReportMessage {
             key,
@@ -247,13 +243,11 @@ impl ReportData {
         let serialized_size =
             rmp_serde::to_vec(&primary_key_size).context("failed to serialize KeySizeData")?;
         let size_req = Request {
-            request: vec![KeyOperation::PutMetadata(
-                key.clone(),
-                LastWriterWinsLattice::from_pair(ts, serialized_size),
-            )],
+            request: vec![KeyOperation::PutMetadata(key.clone(), serialized_size)],
             response_address: Default::default(),
             request_id: Default::default(),
             address_cache_size: Default::default(),
+            timestamp: ts.0.clone(),
         };
         Ok(ReportMessage {
             key,

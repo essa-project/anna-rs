@@ -9,7 +9,7 @@ use super::Lattice;
 /// ## Example
 ///
 /// ```
-/// use anna_api::lattice::{BoolLattice, Lattice};
+/// use anna::lattice::{BoolLattice, Lattice};
 ///
 /// // initialize a new Lattice value with `false`
 /// let mut lattice = BoolLattice::new(false);

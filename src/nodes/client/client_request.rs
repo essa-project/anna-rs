@@ -33,6 +33,7 @@ impl From<ClientRequest> for Request {
             response_address: Some(r.response_address),
             request_id: Some(r.request_id),
             address_cache_size: r.address_cache_size,
+            timestamp: chrono::Utc::now(),
         }
     }
 }

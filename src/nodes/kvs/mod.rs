@@ -743,6 +743,7 @@ struct PendingRequest {
     addr: Option<String>,
     reply_stream: Option<TcpStream>,
     response_id: Option<String>,
+    timestamp: chrono::DateTime<chrono::Utc>,
 }
 
 impl PendingRequest {

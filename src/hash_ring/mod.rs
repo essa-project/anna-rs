@@ -198,6 +198,7 @@ impl HashRingUtil {
             response_address: Some(response_address.to_string()),
             request_id: None,
             address_cache_size: Default::default(),
+            timestamp: chrono::Utc::now(),
         };
 
         if let Some(connection) = node_connections.get_mut(kvs_thread) {

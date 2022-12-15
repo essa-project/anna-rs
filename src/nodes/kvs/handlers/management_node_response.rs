@@ -71,6 +71,7 @@ impl KvsNode {
                         request_id: Some(format!("{}:{}", response_address, self.request_id)),
                         response_address: Some(response_address.to_string()),
                         address_cache_size: Default::default(),
+                        timestamp: chrono::Utc::now(),
                     });
 
                     self.request_id += 1;

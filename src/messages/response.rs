@@ -2,8 +2,6 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use crate::lattice::causal::MultiKeyCausalLattice;
-use crate::lattice::SetLattice;
 use crate::{store::LatticeValue, AnnaError, Key};
 
 /// A response to a [`Request`][super::Request].
@@ -68,8 +66,6 @@ pub enum ClientResponseValue {
     OrderedSet(BTreeSet<Vec<u8>>),
     /// respond a set
     Set(HashSet<Vec<u8>>),
-    /// Multi-key causal lattice, currently this mode is only for testing purpose
-    MultiCausal(MultiKeyCausalLattice<SetLattice<Vec<u8>>>),
 }
 
 impl From<LatticeValue> for ClientResponseValue {
@@ -93,7 +89,7 @@ impl From<LatticeValue> for ClientResponseValue {
                 ClientResponseValue::Map(rmap)
             }
             LatticeValue::MultiCausal(mul_key_lattice) => {
-                ClientResponseValue::MultiCausal(mul_key_lattice.clone())
+                ClientResponseValue::Set(mul_key_lattice.reveal().value.reveal().clone())
             }
         }
     }
