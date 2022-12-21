@@ -343,6 +343,32 @@ impl ClientNode {
         Ok(request_id)
     }
 
+    /// Starts a request to increase the given [`i64`] to the given key, that value is a [`CounterLattice`][crate::lattice::CounterLattice].
+    ///
+    /// Returns the ID of the request, which can be used to find the matching response.
+    ///
+    /// The request might not be sent immediately. This happens when the client node does not
+    /// which KVS nodes are responsible for the key. In this case, it sends a [`AddressRequest`]
+    /// message to one of the configured routing nodes first.
+    ///
+    /// Each `PUT` request is acknowledged by the KVS node with a [`Response`] message. To receive
+    /// this response, the [`Self::wait_for_matching_response`] or [`Self::receive_async`]
+    /// function can be used.
+    pub async fn inc_async(&mut self, key: ClientKey, value: i64) -> eyre::Result<String> {
+        let request_id = self.generate_request_id();
+        let request = ClientRequest {
+            operation: KeyOperation::Inc(key, value),
+            response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
+            request_id: request_id.clone(),
+            address_cache_size: HashMap::new(),
+            timestamp: Instant::now(),
+        };
+
+        self.try_request(request).await?;
+
+        Ok(request_id)
+    }
+
     /// Starts a request to add the given [`HashSet<Vec<u8>>`] to the given key, that value is a Set.
     ///
     /// Returns the ID of the request, which can be used to find the matching response.
@@ -611,6 +637,21 @@ impl ClientNode {
             .await
             .context("failed to send put_lww")?;
         Ok(())
+    }
+
+    async fn inc(&mut self, key: ClientKey, value: i64) -> eyre::Result<i64> {
+        let request_id = self
+            .inc_async(key, value)
+            .await
+            .context("failed to send inc")?;
+        let tuple = self.wait_for_matching_response(request_id).await?;
+        let response = tuple
+            .lattice
+            .ok_or_else(|| anyhow!("response has no lattice value in tuple"))?;
+        match response {
+            ClientResponseValue::Int(n) => Ok(n),
+            other => Err(anyhow!("expected a int, got `{:?}`", other)),
+        }
     }
 
     async fn get_set(&mut self, key: ClientKey) -> eyre::Result<HashSet<Vec<u8>>> {

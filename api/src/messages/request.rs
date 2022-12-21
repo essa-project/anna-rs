@@ -56,16 +56,19 @@ pub enum KeyOperation {
     SetAdd(ClientKey, HashSet<Vec<u8>>),
     /// Add the value of one or more fields on a a single-key causal hashmap lattice.
     MapAdd(ClientKey, HashMap<String, Vec<u8>>),
+    /// Increase the value to a client key.
+    Inc(ClientKey, i64),
 }
 
 impl KeyOperation {
     /// Returns the key that this operation reads/writes.
     pub fn key(&self) -> ClientKey {
         match self {
-            KeyOperation::Get(key) => key.clone().into(),
-            KeyOperation::Put(key, _) => key.clone().into(),
-            KeyOperation::SetAdd(key, _) => key.clone().into(),
-            KeyOperation::MapAdd(key, _) => key.clone().into(),
+            KeyOperation::Get(key) => key.clone(),
+            KeyOperation::Put(key, _) => key.clone(),
+            KeyOperation::SetAdd(key, _) => key.clone(),
+            KeyOperation::MapAdd(key, _) => key.clone(),
+            KeyOperation::Inc(key, _) => key.clone(),
         }
     }
 
@@ -76,6 +79,7 @@ impl KeyOperation {
             KeyOperation::Put(..) => ResponseType::Put,
             KeyOperation::SetAdd(..) => ResponseType::SetAdd,
             KeyOperation::MapAdd(..) => ResponseType::MapAdd,
+            KeyOperation::Inc(..) => ResponseType::Inc,
         }
     }
 }

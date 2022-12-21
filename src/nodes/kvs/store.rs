@@ -2,7 +2,7 @@ use crate::{
     lattice::{
         causal::SingleKeyCausalLattice,
         last_writer_wins::{Timestamp, TimestampValuePair},
-        LastWriterWinsLattice, Lattice, MapLattice, MaxLattice, SetLattice,
+        CounterLattice, LastWriterWinsLattice, Lattice, MapLattice, MaxLattice, SetLattice,
     },
     messages::{request::KeyOperation, response::ClientResponseValue},
     store::LatticeValue,
@@ -120,6 +120,37 @@ impl KvsNode {
 
                 self.local_changeset.insert(key);
                 Ok((None, None))
+            }
+            KeyOperation::Inc(key, value) => {
+                let key = Key::Client(key);
+
+                let value = match self.kvs.entry(key.clone()) {
+                    Entry::Vacant(entry) => {
+                        let mut counter = CounterLattice::new();
+                        counter.inc(
+                            format!("{}/{}", self.node_id, self.thread_id),
+                            self.gossip_epoch,
+                            value,
+                        );
+                        entry.insert(LatticeValue::Counter(counter));
+                        value
+                    }
+                    Entry::Occupied(mut entry) => {
+                        if let LatticeValue::Counter(counter) = entry.get_mut() {
+                            counter.inc(
+                                format!("{}/{}", self.node_id, self.thread_id),
+                                self.gossip_epoch,
+                                value,
+                            );
+                            counter.total()
+                        } else {
+                            return Err(AnnaError::Lattice);
+                        }
+                    }
+                };
+
+                self.local_changeset.insert(key);
+                Ok((Some(ClientResponseValue::Int(value)), None))
             }
         }
     }

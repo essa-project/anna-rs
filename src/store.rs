@@ -9,7 +9,8 @@ use crate::{
             VectorClockValuePair,
         },
         last_writer_wins::TimestampValuePair,
-        LastWriterWinsLattice, Lattice, MapLattice, MaxLattice, OrderedSetLattice, SetLattice,
+        CounterLattice, LastWriterWinsLattice, Lattice, MapLattice, MaxLattice, OrderedSetLattice,
+        SetLattice,
     },
     AnnaError,
 };
@@ -30,9 +31,11 @@ pub enum LatticeValue {
     Set(SetLattice<Vec<u8>>),
     /// Ordered-set lattice
     OrderedSet(OrderedSetLattice<Vec<u8>>),
-    /// Single-key causal lattice
+    /// Single-key causal Counter lattice
+    Counter(CounterLattice),
+    /// Single-key causal Set lattice
     SingleCausal(SingleKeyCausalLattice<SetLattice<Vec<u8>>>),
-    /// Single-key causal lattice
+    /// Single-key causal Map lattice
     SingleCausalMap(SingleKeyCausalLattice<MapLattice<String, LastWriterWinsLattice<Vec<u8>>>>),
     /// Multi-key causal lattice
     MultiCausal(MultiKeyCausalLattice<SetLattice<Vec<u8>>>),
@@ -180,6 +183,7 @@ impl LatticeValue {
             LatticeValue::Lww(_) => LatticeType::Lww,
             LatticeValue::Set(_) => LatticeType::Set,
             LatticeValue::OrderedSet(_) => LatticeType::OrderedSet,
+            LatticeValue::Counter(_) => LatticeType::Counter,
             LatticeValue::SingleCausal(_) => LatticeType::SingleCausal,
             LatticeValue::SingleCausalMap(_) => LatticeType::SingleCausalMap,
             LatticeValue::MultiCausal(_) => LatticeType::MultiCausal,
@@ -226,6 +230,8 @@ pub enum LatticeType {
     Lww,
     /// Unordered set lattice
     Set,
+    /// Counter lattice
+    Counter,
     /// Single-key causal lattice
     SingleCausal,
     /// Single-key causal map lattice
@@ -328,6 +334,7 @@ impl LatticeSizeEstimate for LatticeValue {
             LatticeValue::Lww(lattice) => lattice.size_estimate(),
             LatticeValue::Set(lattice) => lattice.size_estimate(),
             LatticeValue::OrderedSet(lattice) => lattice.size_estimate(),
+            LatticeValue::Counter(lattice) => lattice.size_estimate(),
             LatticeValue::SingleCausal(lattice) => lattice.size_estimate(),
             LatticeValue::SingleCausalMap(lattice) => lattice.size_estimate(),
             LatticeValue::MultiCausal(lattice) => lattice.size_estimate(),
@@ -407,6 +414,18 @@ impl LatticeSizeEstimate for SetLattice<Vec<u8>> {
 impl LatticeSizeEstimate for OrderedSetLattice<Vec<u8>> {
     fn size_estimate(&self) -> usize {
         self.reveal().len()
+    }
+}
+
+impl LatticeSizeEstimate for CounterLattice {
+    fn size_estimate(&self) -> usize {
+        let mut size = 0;
+
+        for (k, v) in self.reveal() {
+            size += mem::size_of_val(k);
+            size += mem::size_of_val(v);
+        }
+        size
     }
 }
 

@@ -36,6 +36,8 @@ pub enum ResponseType {
     SetAdd,
     /// Response to a request to add hashmap into the KVS.
     MapAdd,
+    /// Response to a request to increase value into the KVS.
+    Inc,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, serde::Serialize, serde::Deserialize)]

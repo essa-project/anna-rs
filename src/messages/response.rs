@@ -33,6 +33,8 @@ pub enum ResponseType {
     SetAdd,
     /// Response to a request to add hashmap into the KVS.
     MapAdd,
+    /// Response to a request to increase value into the KVS.
+    Inc,
 }
 
 /// A protobuf to represent an individual key, both for requests and responses.
@@ -77,6 +79,7 @@ impl From<LatticeValue> for ClientResponseValue {
             LatticeValue::OrderedSet(value) => {
                 ClientResponseValue::OrderedSet(value.reveal().clone())
             }
+            LatticeValue::Counter(counter) => ClientResponseValue::Int(counter.total()),
             LatticeValue::SingleCausal(set) => {
                 ClientResponseValue::Set(set.reveal().value.reveal().clone())
             }

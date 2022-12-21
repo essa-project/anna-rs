@@ -138,8 +138,8 @@ impl ClientNode {
         input: String,
         stdout: &mut dyn Write,
     ) -> eyre::Result<()> {
-        const HELP: &str = "\n\nValid commands are are GET, GET_SET, PUT, PUT_SET, \
-            PUT_CAUSAL, and GET_CAUSAL.";
+        const HELP: &str =
+            "\n\nValid commands are are GET, PUT, GET_SET, ADD_SET, GET_HASHMAP and ADD_HASHMAP.";
 
         let mut split = input.split_whitespace();
         let command = split
@@ -173,6 +173,20 @@ impl ClientNode {
 
                 log::trace!("[OK] Got {} from GET", string);
                 writeln!(stdout, "{}", string)?;
+            }
+            "INC" | "inc" => {
+                let key = split
+                    .next()
+                    .ok_or_else(|| anyhow!("missing key and value arguments"))?;
+                let value = split
+                    .next()
+                    .ok_or_else(|| anyhow!("missing value argument"))?;
+                if let Some(extra) = split.next() {
+                    bail!("unexpected argument `{}`", extra);
+                }
+
+                let i = smol::block_on(self.inc(key.into(), value.parse()?))?;
+                writeln!(stdout, "{}", i)?;
             }
             "ADD_SET" | "add_set" => {
                 let key = split
