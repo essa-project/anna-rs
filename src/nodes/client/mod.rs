@@ -1,23 +1,23 @@
 //! Client proxy nodes that expose a GET/PUT-based interface to users.
 
 pub use self::interactive::run_interactive;
-use crate::{
+use anna_api::{
     messages::{
         request::KeyOperation,
         response::{ClientResponseValue, ResponseTuple},
         AddressRequest, AddressResponse, Request, Response, TcpMessage,
     },
     topics::{ClientThread, KvsThread, RoutingThread},
-    AnnaError, ClientKey, Key,
+    AnnaError, ClientKey,
 };
 use client_request::{ClientRequest, PendingRequest};
 use eyre::{anyhow, bail, eyre, Context, ContextCompat};
 use futures::{
     stream::{self, FusedStream, FuturesUnordered},
-    Future, FutureExt, Stream, StreamExt, TryStreamExt,
+    AsyncReadExt, Future, FutureExt, Stream, StreamExt, TryStreamExt,
 };
 use rand::prelude::IteratorRandom;
-use smol::{channel, net::TcpStream};
+use smol::{channel, io::AsyncWriteExt, net::TcpStream};
 use std::{
     collections::{HashMap, HashSet},
     iter::Extend,
@@ -27,10 +27,73 @@ use std::{
 };
 use zenoh::prelude::SplitBuffer;
 
-use super::{receive_tcp_message, send_tcp_message};
-
 mod client_request;
 mod interactive;
+
+/// Receives a [`TcpMessage`] from the given stream.
+///
+/// This function requires that all messages are sent using [`send_tcp_message`],
+/// otherwise parsing the messages will fail.
+pub async fn receive_tcp_message(
+    stream: &mut (impl futures::AsyncRead + Unpin),
+) -> eyre::Result<Option<TcpMessage>> {
+    const MAX_MSG_LEN: u64 = u32::MAX as u64;
+
+    let mut len_raw = [0; 8];
+    if let Err(err) = stream.read_exact(&mut len_raw).await {
+        if err.kind() == std::io::ErrorKind::UnexpectedEof
+            || err.kind() == std::io::ErrorKind::ConnectionReset
+        {
+            return Ok(None);
+        } else {
+            return Err(eyre::Error::new(err).wrap_err("failed to read message length"));
+        }
+    }
+    let len = u64::from_le_bytes(len_raw);
+
+    if len > MAX_MSG_LEN {
+        bail!("Message is too long (length: {} bytes)", len);
+    }
+
+    let mut buf = vec![0; len.try_into().unwrap()];
+    if let Err(err) = stream.read_exact(&mut buf).await {
+        if err.kind() == std::io::ErrorKind::UnexpectedEof {
+            log::warn!("receive tcp message failed: {}", err);
+            return Ok(None);
+        } else {
+            return Err(eyre::Error::new(err).wrap_err("failed to read message"));
+        }
+    }
+    rmp_serde::from_slice(&buf)
+        .with_context(|| {
+            format!(
+                "failed to deserialize message: `{}`",
+                String::from_utf8_lossy(&buf)
+            )
+        })
+        .map(Some)
+}
+
+/// Sends the given message on the given tcp stream.
+///
+/// TCP messages should only be sent using this method, to ensure that all
+/// messages are sent in the same format.
+pub async fn send_tcp_message(
+    message: &TcpMessage,
+    connection: &mut TcpStream,
+) -> eyre::Result<()> {
+    let serialized = rmp_serde::to_vec(&message).context("failed to serialize tcp message")?;
+    let len = (serialized.len() as u64).to_le_bytes();
+    connection
+        .write_all(&len)
+        .await
+        .context("failed to send message length")?;
+    connection
+        .write_all(&serialized)
+        .await
+        .context("failed to send message")?;
+    Ok(())
+}
 
 /// Client nodes interact with KVS nodes to serve user requests.
 ///
@@ -655,45 +718,43 @@ impl ClientNode {
 
     async fn try_request(&mut self, mut request: ClientRequest) -> eyre::Result<()> {
         let key = request.operation.key();
-        if let Key::Client(key) = key {
-            // we only get NULL back for the worker thread if the query to the routing
-            // tier timed out, which should never happen.
-            let worker = match self
-                .get_worker_thread(&key)
-                .await
-                .context("failed to get worker thread")?
-            {
-                Some(worker) => worker.clone(),
-                None => {
-                    // this means a key addr request is issued asynchronously
-                    if let Some((_, pending)) = self.pending_requests.get_mut(&key) {
-                        pending.push(request.clone());
-                    } else {
-                        self.pending_requests
-                            .insert(key.clone(), (Instant::now(), vec![request.clone()]));
-                    }
-
-                    return Ok(());
+        // we only get NULL back for the worker thread if the query to the routing
+        // tier timed out, which should never happen.
+        let worker = match self
+            .get_worker_thread(&key)
+            .await
+            .context("failed to get worker thread")?
+        {
+            Some(worker) => worker.clone(),
+            None => {
+                // this means a key addr request is issued asynchronously
+                if let Some((_, pending)) = self.pending_requests.get_mut(&key) {
+                    pending.push(request.clone());
+                } else {
+                    self.pending_requests
+                        .insert(key.clone(), (Instant::now(), vec![request.clone()]));
                 }
-            };
 
-            request
-                .address_cache_size
-                .insert(key.clone(), self.key_address_cache[&key].len());
+                return Ok(());
+            }
+        };
 
-            self.send_request(&worker, &request.clone().into())
-                .await
-                .context("failed to send request")?;
+        request
+            .address_cache_size
+            .insert(key.clone(), self.key_address_cache[&key].len());
 
-            self.pending_responses.insert(
-                request.request_id.clone(),
-                PendingRequest {
-                    tp: Instant::now(),
-                    node: worker,
-                    request: request.clone(),
-                },
-            );
-        }
+        self.send_request(&worker, &request.clone().into())
+            .await
+            .context("failed to send request")?;
+
+        self.pending_responses.insert(
+            request.request_id.clone(),
+            PendingRequest {
+                tp: Instant::now(),
+                node: worker,
+                request: request.clone(),
+            },
+        );
 
         Ok(())
     }
@@ -820,28 +881,26 @@ fn check_tuple(
     tuple: &ResponseTuple,
     key_address_cache: &mut HashMap<ClientKey, HashSet<KvsThread>>,
 ) -> bool {
-    if let Key::Client(key) = &tuple.key {
-        if let Some(AnnaError::WrongThread) = tuple.error {
-            log::info!(
-                "Server ordered invalidation of key address cache for key {}.
-          Retrying request.",
-                key
-            );
+    let key: ClientKey = tuple.key.clone().into();
+    if let Some(AnnaError::WrongThread) = tuple.error {
+        log::info!(
+            "Server ordered invalidation of key address cache for key {}.
+      Retrying request.",
+            key
+        );
 
-            key_address_cache.remove(key);
-            return true;
-        }
-
-        if tuple.invalidate {
-            key_address_cache.remove(key);
-
-            log::info!(
-                "Server ordered invalidation of key address cache for key {}",
-                key
-            );
-        }
+        key_address_cache.remove(&key);
+        return true;
     }
 
+    if tuple.invalidate {
+        key_address_cache.remove(&key);
+
+        log::info!(
+            "Server ordered invalidation of key address cache for key {}",
+            key
+        );
+    }
     false
 }
 
@@ -852,13 +911,14 @@ fn generate_bad_response(req: &Request) -> Response {
         tuples: req
             .request
             .iter()
-            .map(|key_operation| ResponseTuple {
-                key: key_operation.key().clone(),
-                lattice: None,
-                metadata: None,
-                ty: key_operation.response_ty(),
-                error: None,
-                invalidate: false,
+            .map(|key_operation| {
+                ResponseTuple::new(
+                    key_operation.key().clone(),
+                    None,
+                    key_operation.response_ty(),
+                    None,
+                    false,
+                )
             })
             .collect(),
     }

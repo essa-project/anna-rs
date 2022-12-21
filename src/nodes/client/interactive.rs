@@ -1,5 +1,6 @@
 use super::ClientNode;
-use crate::{config::Config, nodes::request_cluster_info, topics::RoutingThread};
+use crate::{config::Config, nodes::request_cluster_info};
+use anna_api::topics::RoutingThread;
 use eyre::{anyhow, bail, Context};
 use std::{
     collections::HashMap,

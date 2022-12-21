@@ -1,5 +1,7 @@
 use std::{error::Error, fmt::Display, sync::Arc};
 
+pub mod messages;
+pub mod topics;
 /// A string-based key type used to store user-supplied data.
 ///
 /// We use an [`Arc`]-wrapped [`String`] because keys often get cloned. For bare strings, this

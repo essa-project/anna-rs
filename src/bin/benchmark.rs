@@ -3,9 +3,10 @@ use anna::{
     config::Config,
     messages::user_feedback::{KeyLatency, UserFeedback},
     nodes::{client::ClientNode, request_cluster_info},
-    topics::{benchmark_topic, MonitoringThread, RoutingThread},
+    topics::{benchmark_topic, MonitoringThread},
     ClientKey, ZenohValueAsString,
 };
+use anna_api::topics::RoutingThread;
 use argh::FromArgs;
 use eyre::{anyhow, bail, Context};
 use std::{
