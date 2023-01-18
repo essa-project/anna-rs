@@ -113,7 +113,7 @@ impl RoutingNode {
                 .await
                 .context("failed to send reply via TCP")?;
             } else {
-                let serialized_reply = rmp_serde::to_vec(&addr_response)
+                let serialized_reply = rmp_serde::to_vec_named(&addr_response)
                     .context("failed to serialize KeyAddressResponse")?;
                 self.zenoh
                     .put(&addr_request.response_address, serialized_reply)

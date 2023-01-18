@@ -121,7 +121,7 @@ impl ReportData {
                         node_id: management_id.clone(),
                     }
                     .query_func_nodes_topic(zenoh_prefix),
-                    rmp_serde::to_vec(&FuncNodesQuery {
+                    rmp_serde::to_vec_named(&FuncNodesQuery {
                         response_topic: wt.management_node_response_topic(zenoh_prefix).to_string(),
                     })?,
                 )
@@ -170,9 +170,9 @@ impl ReportData {
             access_count: self.access_count,
         };
         let serialized_stat =
-            rmp_serde::to_vec(&stat).context("failed to serialize ServerThreadStatistics")?;
+            rmp_serde::to_vec_named(&stat).context("failed to serialize ServerThreadStatistics")?;
         let stat_req = Request {
-            request: vec![KeyOperation::PutMetadata(key.clone(), serialized_stat)],
+            inner_operations: vec![KeyOperation::PutMetadata(key.clone(), serialized_stat)],
             response_address: Default::default(),
             request_id: Default::default(),
             address_cache_size: Default::default(),
@@ -214,9 +214,9 @@ impl ReportData {
             kind: KvsMetadataKind::KeyAccess,
         };
         let serialized_access =
-            rmp_serde::to_vec(&access).context("failed to serialize KeyAccessData")?;
+            rmp_serde::to_vec_named(&access).context("failed to serialize KeyAccessData")?;
         let access_req = Request {
-            request: vec![KeyOperation::PutMetadata(key.clone(), serialized_access)],
+            inner_operations: vec![KeyOperation::PutMetadata(key.clone(), serialized_access)],
             response_address: Default::default(),
             request_id: Default::default(),
             address_cache_size: Default::default(),
@@ -240,10 +240,10 @@ impl ReportData {
             kvs_thread: node.clone(),
             kind: KvsMetadataKind::KeySize,
         };
-        let serialized_size =
-            rmp_serde::to_vec(&primary_key_size).context("failed to serialize KeySizeData")?;
+        let serialized_size = rmp_serde::to_vec_named(&primary_key_size)
+            .context("failed to serialize KeySizeData")?;
         let size_req = Request {
-            request: vec![KeyOperation::PutMetadata(key.clone(), serialized_size)],
+            inner_operations: vec![KeyOperation::PutMetadata(key.clone(), serialized_size)],
             response_address: Default::default(),
             request_id: Default::default(),
             address_cache_size: Default::default(),

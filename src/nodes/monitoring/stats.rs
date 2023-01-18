@@ -74,7 +74,7 @@ impl<'a> MonitoringNode<'a> {
         let mut expected_response_ids = HashSet::new();
         for (address, request) in addr_request_map {
             let serialized_req =
-                rmp_serde::to_vec(&request).context("failed to serialize KeyRequest")?;
+                rmp_serde::to_vec_named(&request).context("failed to serialize KeyRequest")?;
             self.zenoh
                 .put(&address, serialized_req)
                 .await

@@ -129,7 +129,7 @@ impl KvsNode {
                                 .await
                                 .context("failed to send reply via TCP")?;
                         } else {
-                            let serialized_response = rmp_serde::to_vec(&response)
+                            let serialized_response = rmp_serde::to_vec_named(&response)
                                 .context("failed to serialize key response")?;
                             self.zenoh
                                 .put(request_addr, serialized_response)

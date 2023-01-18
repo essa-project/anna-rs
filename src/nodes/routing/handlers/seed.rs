@@ -26,7 +26,7 @@ impl RoutingNode {
             membership.tiers.push(tier);
         }
 
-        rmp_serde::to_vec(&membership).unwrap()
+        rmp_serde::to_vec_named(&membership).unwrap()
     }
 }
 

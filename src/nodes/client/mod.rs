@@ -82,7 +82,8 @@ pub async fn send_tcp_message(
     message: &TcpMessage,
     connection: &mut TcpStream,
 ) -> eyre::Result<()> {
-    let serialized = rmp_serde::to_vec(&message).context("failed to serialize tcp message")?;
+    let serialized =
+        rmp_serde::to_vec_named(&message).context("failed to serialize tcp message")?;
     let len = (serialized.len() as u64).to_le_bytes();
     connection
         .write_all(&len)
@@ -840,7 +841,7 @@ impl ClientNode {
             self.zenoh
                 .put(
                     &target.request_topic(&self.zenoh_prefix),
-                    rmp_serde::to_vec(request).context("failed to serialize Request")?,
+                    rmp_serde::to_vec_named(request).context("failed to serialize Request")?,
                 )
                 .await
                 .map_err(|e| eyre!(e))
@@ -876,8 +877,8 @@ impl ClientNode {
         if let Some(connection) = self.routing_thread_connections.get_mut(&rt_thread) {
             send_tcp_message(&TcpMessage::AddressRequest(request), connection).await?;
         } else {
-            let serialized =
-                rmp_serde::to_vec(&request).context("failed to serialize KeyAddressRequest")?;
+            let serialized = rmp_serde::to_vec_named(&request)
+                .context("failed to serialize KeyAddressRequest")?;
             self.zenoh
                 .put(
                     &rt_thread.address_request_topic(&self.zenoh_prefix),
@@ -950,7 +951,7 @@ fn generate_bad_response(req: &Request) -> Response {
         response_id: req.request_id.clone(),
         error: Err(AnnaError::Timeout),
         tuples: req
-            .request
+            .inner_operations
             .iter()
             .map(|key_operation| {
                 ResponseTuple::new(

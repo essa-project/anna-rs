@@ -28,7 +28,7 @@ impl KvsNode {
 
         let timestamp = request.timestamp;
 
-        for tuple in request.request {
+        for tuple in request.inner_operations {
             // first check if the thread is responsible for the key
             let key = tuple.key().clone();
 
@@ -121,8 +121,8 @@ impl KvsNode {
                         .await
                         .context("failed to send reply via TCP")?;
                 } else {
-                    let serialized_response =
-                        rmp_serde::to_vec(&response).context("failed to serialize key response")?;
+                    let serialized_response = rmp_serde::to_vec_named(&response)
+                        .context("failed to serialize key response")?;
                     self.zenoh
                         .put(&response_addr, serialized_response)
                         .await
@@ -165,7 +165,7 @@ mod tests {
         zenoh_prefix: &str,
     ) -> Request {
         Request {
-            request: vec![KeyOperation::Get(key.into())],
+            inner_operations: vec![KeyOperation::Get(key.into())],
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)
@@ -185,7 +185,7 @@ mod tests {
         zenoh_prefix: &str,
     ) -> Request {
         Request {
-            request: vec![KeyOperation::MapAdd(key, map)],
+            inner_operations: vec![KeyOperation::MapAdd(key, map)],
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)
@@ -205,7 +205,7 @@ mod tests {
         zenoh_prefix: &str,
     ) -> Request {
         Request {
-            request: vec![KeyOperation::SetAdd(key, set)],
+            inner_operations: vec![KeyOperation::SetAdd(key, set)],
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)
@@ -225,7 +225,7 @@ mod tests {
         zenoh_prefix: &str,
     ) -> Request {
         Request {
-            request: vec![KeyOperation::Put(key, lww_value)],
+            inner_operations: vec![KeyOperation::Put(key, lww_value)],
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)

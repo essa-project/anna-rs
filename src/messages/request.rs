@@ -17,7 +17,7 @@ pub struct Request {
     /// key; used for DHT membership change optimization.
     pub address_cache_size: HashMap<ClientKey, usize>,
     /// The type and data of this request.
-    pub request: Vec<KeyOperation>,
+    pub inner_operations: Vec<KeyOperation>,
     /// The request creation time.
     pub timestamp: chrono::DateTime<chrono::Utc>,
 }
@@ -37,20 +37,12 @@ impl Request {
     }
 }
 
-/// Specifies the request type and associated data.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct RequestData {
-    /// Operate the stored values.
-    /// The list of operations that we want to apply.
-    pub operations: Vec<KeyOperation>,
-}
-
 /// Abstraction for a single key operation.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum KeyOperation {
     /// Get the value of a client key.
     Get(ClientKey),
-    /// Get the value of a metadat key.
+    /// Get the value of a metadata key.
     GetMetadata(MetadataKey),
     /// Assign a new value to a client key.
     Put(ClientKey, Vec<u8>),

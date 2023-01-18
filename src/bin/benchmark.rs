@@ -290,7 +290,7 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
                             }
                         }
 
-                        let serialized_latency = rmp_serde::to_vec(&feedback)
+                        let serialized_latency = rmp_serde::to_vec_named(&feedback)
                             .context("failed to serialize UserFeedback")?;
 
                         zenoh
@@ -323,8 +323,8 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
                     key_latency: Default::default(),
                 };
 
-                let serialized_latency =
-                    rmp_serde::to_vec(&feedback).context("failed to serialize UserFeedback")?;
+                let serialized_latency = rmp_serde::to_vec_named(&feedback)
+                    .context("failed to serialize UserFeedback")?;
 
                 zenoh
                     .put(

@@ -47,7 +47,7 @@ impl<'a> MonitoringNode<'a> {
                 self.zenoh
                     .put(
                         &management_node.remove_node_topic(&self.zenoh_prefix),
-                        rmp_serde::to_vec(&RemoveNode {
+                        rmp_serde::to_vec_named(&RemoveNode {
                             departed_node_id: departed.node_id,
                         })?,
                     )

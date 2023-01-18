@@ -178,7 +178,7 @@ impl KvsNode {
             if !threads.is_empty() {
                 let target = threads.choose(&mut thread_rng()).unwrap();
                 let target_address = target.request_topic(&self.zenoh_prefix);
-                let serialized = rmp_serde::to_vec(&message)
+                let serialized = rmp_serde::to_vec_named(&message)
                     .context("failed to serialize report Request message")?;
                 self.zenoh
                     .put(&target_address, serialized)
@@ -212,7 +212,8 @@ impl KvsNode {
 
         // send gossip
         for (addr, msg) in gossip_map {
-            let serialized = rmp_serde::to_vec(&msg).context("failed to serialize KeyRequest")?;
+            let serialized =
+                rmp_serde::to_vec_named(&msg).context("failed to serialize KeyRequest")?;
             self.zenoh
                 .put(&addr.clone(), serialized)
                 .await
@@ -231,7 +232,7 @@ impl KvsNode {
         for (gossip_address, tuples) in gossip_map {
             let key_request = GossipRequest { tuples };
             let serialized =
-                rmp_serde::to_vec(&key_request).context("failed to serialize KeyRequest")?;
+                rmp_serde::to_vec_named(&key_request).context("failed to serialize KeyRequest")?;
             self.zenoh
                 .put(&gossip_address, serialized)
                 .await

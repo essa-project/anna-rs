@@ -136,7 +136,7 @@ impl RoutingNode {
                         .await
                         .context("failed to send reply via TCP")?;
                 } else {
-                    let serialized = rmp_serde::to_vec(&key_res)
+                    let serialized = rmp_serde::to_vec_named(&key_res)
                         .context("failed to serialize KeyAddressResponse")?;
                     self.zenoh
                         .put(&pending_key_req.reply_path.clone(), serialized)
@@ -221,7 +221,8 @@ mod tests {
             rf.local.push(rep_local);
         }
 
-        let repfactor = rmp_serde::to_vec(&rf).expect("failed to serialize ReplicationFactor");
+        let repfactor =
+            rmp_serde::to_vec_named(&rf).expect("failed to serialize ReplicationFactor");
 
         tp.metadata = Some(repfactor);
         response.tuples.push(tp);

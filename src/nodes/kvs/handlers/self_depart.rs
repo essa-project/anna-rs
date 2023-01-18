@@ -34,7 +34,7 @@ impl KvsNode {
                         .put(
                             &KvsThread::new(node_id.clone(), 0)
                                 .node_depart_topic(&self.zenoh_prefix),
-                            rmp_serde::to_vec(&depart_message)
+                            rmp_serde::to_vec_named(&depart_message)
                                 .context("failed to serialize depart message")?,
                         )
                         .await
@@ -42,7 +42,7 @@ impl KvsNode {
                 }
             }
 
-            let notify_message = rmp_serde::to_vec(&messages::Notify::Depart(depart_message))
+            let notify_message = rmp_serde::to_vec_named(&messages::Notify::Depart(depart_message))
                 .context("failed to serialize notify message")?;
 
             // notify all routing nodes
@@ -103,7 +103,7 @@ impl KvsNode {
         self.zenoh
             .put(
                 &ack_topic,
-                rmp_serde::to_vec(&Departed {
+                rmp_serde::to_vec_named(&Departed {
                     tier: self.config_data.self_tier,
                     node_id: self.node_id.clone(),
                 })?,
@@ -143,7 +143,7 @@ mod tests {
             server.global_hash_rings[&Tier::Memory].unique_nodes().len(),
             1
         );
-        let serialized = rmp_serde::to_vec(&self_depart).unwrap();
+        let serialized = rmp_serde::to_vec_named(&self_depart).unwrap();
         smol::block_on(server.self_depart_handler(&serialized)).unwrap();
 
         let message = subscriber

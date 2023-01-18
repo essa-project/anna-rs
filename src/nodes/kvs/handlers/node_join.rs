@@ -7,7 +7,8 @@ impl KvsNode {
     pub async fn node_join_handler(&mut self, message: messages::Join) -> eyre::Result<()> {
         let work_start = Instant::now();
 
-        let serialized = rmp_serde::to_vec(&message).context("failed to serialize Join message")?;
+        let serialized =
+            rmp_serde::to_vec_named(&message).context("failed to serialize Join message")?;
         let messages::Join {
             tier,
             node_id: new_server_node_id,
@@ -33,7 +34,7 @@ impl KvsNode {
             // and it communicates that information to non-0 threads on its own machine
             if self.thread_id == 0 {
                 // send my ID to the new server node
-                let msg = rmp_serde::to_vec(&messages::Join {
+                let msg = rmp_serde::to_vec_named(&messages::Join {
                     tier: self.config_data.self_tier,
                     node_id: self.node_id.clone(),
                     join_count: self.self_join_count,

@@ -87,7 +87,7 @@ mod tests {
             }],
         };
 
-        rmp_serde::to_vec(&request).expect("failed to serialize KeyRequest")
+        rmp_serde::to_vec_named(&request).expect("failed to serialize KeyRequest")
     }
 
     #[test]

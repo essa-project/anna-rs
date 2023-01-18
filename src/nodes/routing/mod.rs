@@ -197,7 +197,8 @@ impl RoutingNode {
             self.zenoh
                 .put(
                     &MonitoringThread::notify_topic(&self.zenoh_prefix),
-                    rmp_serde::to_vec(&message).context("failed to serialize notify message")?,
+                    rmp_serde::to_vec_named(&message)
+                        .context("failed to serialize notify message")?,
                 )
                 .await
                 .map_err(|e| eyre::eyre!(e))
@@ -220,7 +221,7 @@ impl RoutingNode {
                         zenoh
                             .put(
                                 &RoutingThread::advertisement_topic(&zenoh_prefix),
-                                rmp_serde::to_vec(&message)
+                                rmp_serde::to_vec_named(&message)
                                     .context("failed to serialize notify message")?,
                             )
                             .await
@@ -327,7 +328,7 @@ impl RoutingNode {
             .public_ip
             .map(|ip| SocketAddr::new(ip, tcp_port));
         let tcp_addr_serialized =
-            rmp_serde::to_vec(&tcp_addr).context("failed to serialize tcp address")?;
+            rmp_serde::to_vec_named(&tcp_addr).context("failed to serialize tcp address")?;
         let mut tcp_incoming = tcp_listener.incoming().fuse();
 
         let (new_connections_tx, mut new_connections) = channel::bounded(10);

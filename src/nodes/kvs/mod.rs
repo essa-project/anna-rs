@@ -383,7 +383,7 @@ impl KvsNode {
                             .put(
                                 &KvsThread::new(node_id.clone(), 0)
                                     .node_join_topic(&self.zenoh_prefix),
-                                rmp_serde::to_vec(&join_msg)
+                                rmp_serde::to_vec_named(&join_msg)
                                     .context("failed to serialize join message")?,
                             )
                             .await
@@ -393,7 +393,7 @@ impl KvsNode {
                 }
             }
 
-            let notify_msg = rmp_serde::to_vec(&messages::Notify::Join(join_msg))
+            let notify_msg = rmp_serde::to_vec_named(&messages::Notify::Join(join_msg))
                 .context("failed to serialize notify message")?;
 
             // notify proxies that this node has joined

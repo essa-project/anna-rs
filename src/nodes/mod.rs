@@ -24,7 +24,8 @@ pub async fn send_tcp_message(
     message: &TcpMessage,
     connection: &mut TcpStream,
 ) -> eyre::Result<()> {
-    let serialized = rmp_serde::to_vec(&message).context("failed to serialize tcp message")?;
+    let serialized =
+        rmp_serde::to_vec_named(&message).context("failed to serialize tcp message")?;
     let len = (serialized.len() as u64).to_le_bytes();
     connection
         .write_all(&len)

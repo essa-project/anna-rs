@@ -361,7 +361,7 @@ impl<'a> MonitoringNode<'a> {
             if let hash_map::Entry::Vacant(entry) = addr_request_map.entry(target_address) {
                 let response_addr = self.mt.response_topic(&self.zenoh_prefix);
                 entry.insert(Request {
-                    request: vec![KeyOperation::GetMetadata(key.clone())],
+                    inner_operations: vec![KeyOperation::GetMetadata(key.clone())],
                     // NB: response_address might not be necessary here
                     // (or in other places where req_id is constructed either).
                     request_id: Some(format!("{}:{}", response_addr, self.request_id)),
@@ -394,7 +394,7 @@ impl<'a> MonitoringNode<'a> {
             if let hash_map::Entry::Vacant(entry) = addr_request_map.entry(target_address) {
                 let response_addr = self.mt.response_topic(&self.zenoh_prefix);
                 entry.insert(Request {
-                    request: vec![KeyOperation::PutMetadata(key.clone(), value)],
+                    inner_operations: vec![KeyOperation::PutMetadata(key.clone(), value)],
                     // NB: response_address might not be necessary here
                     // (or in other places where req_id is constructed either).
                     request_id: Some(format!("{}:{}", response_addr, self.request_id)),
@@ -442,7 +442,7 @@ impl<'a> MonitoringNode<'a> {
             self.zenoh
                 .put(
                     &management_node.add_nodes_topic(&self.zenoh_prefix),
-                    rmp_serde::to_vec(&AddNodes { tier, number })?,
+                    rmp_serde::to_vec_named(&AddNodes { tier, number })?,
                 )
                 .await
                 .map_err(|e| eyre::eyre!(e))?;
@@ -468,7 +468,7 @@ impl<'a> MonitoringNode<'a> {
         };
 
         self.zenoh
-            .put(&connection_addr, rmp_serde::to_vec(&self_depart)?)
+            .put(&connection_addr, rmp_serde::to_vec_named(&self_depart)?)
             .await
             .map_err(|e| eyre::eyre!(e))?;
 
@@ -522,7 +522,7 @@ impl<'a> MonitoringNode<'a> {
 
             self.prepare_metadata_put_request(
                 &rep_key,
-                rmp_serde::to_vec(&rep_data)?,
+                rmp_serde::to_vec_named(&rep_data)?,
                 &mut addr_request_map,
             )?;
         }
@@ -532,7 +532,7 @@ impl<'a> MonitoringNode<'a> {
         let mut failed_keys = HashSet::new();
         for (address, request) in addr_request_map {
             let serialized_req =
-                rmp_serde::to_vec(&request).context("failed to serialize KeyRequest")?;
+                rmp_serde::to_vec_named(&request).context("failed to serialize KeyRequest")?;
             self.zenoh
                 .put(&address, serialized_req)
                 .await
@@ -620,7 +620,7 @@ impl<'a> MonitoringNode<'a> {
 
         // send replication factor update to all relevant nodes
         for (addr, rep_factor) in replication_factor_map {
-            let serialized = rmp_serde::to_vec(&rep_factor)?;
+            let serialized = rmp_serde::to_vec_named(&rep_factor)?;
             self.zenoh
                 .put(&addr, serialized)
                 .await

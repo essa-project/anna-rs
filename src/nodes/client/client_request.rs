@@ -29,7 +29,7 @@ pub struct ClientRequest {
 impl From<ClientRequest> for Request {
     fn from(r: ClientRequest) -> Self {
         Request {
-            request: vec![r.operation],
+            inner_operations: vec![r.operation],
             response_address: Some(r.response_address),
             request_id: Some(r.request_id),
             address_cache_size: r.address_cache_size,

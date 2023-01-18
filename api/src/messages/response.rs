@@ -61,8 +61,6 @@ pub struct ResponseTuple {
     pub key: Key,
     /// The lattice value for this key, if this key is a [`ClientKey`][anna_api::ClientKey]
     pub lattice: Option<ClientResponseValue>,
-    /// The metadata for this key, if this key is a [`MetadataKey`][crate::metadata::MetadataKey].
-    metadata: Option<Vec<u8>>,
     /// The type of response being sent back to the client (see RequestType).
     pub ty: ResponseType,
     /// The error type specified by the server (see AnnaError).
@@ -83,7 +81,6 @@ impl ResponseTuple {
         ResponseTuple {
             key: Key::Client(key),
             lattice,
-            metadata: None,
             ty,
             error,
             invalidate,

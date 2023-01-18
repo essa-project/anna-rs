@@ -194,7 +194,7 @@ impl HashRingUtil {
         let target_address = kvs_thread.request_topic(zenoh_prefix);
 
         let key_request = Request {
-            request: vec![KeyOperation::GetMetadata(replication_key)],
+            inner_operations: vec![KeyOperation::GetMetadata(replication_key)],
             response_address: Some(response_address.to_string()),
             request_id: None,
             address_cache_size: Default::default(),
@@ -207,7 +207,7 @@ impl HashRingUtil {
                 .context("failed to send key request via TCP")?;
         } else {
             let serialized =
-                rmp_serde::to_vec(&key_request).context("failed to serialize KeyRequest")?;
+                rmp_serde::to_vec_named(&key_request).context("failed to serialize KeyRequest")?;
 
             zenoh
                 .put(&target_address, serialized)

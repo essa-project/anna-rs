@@ -35,7 +35,7 @@ impl RoutingNode {
                     // gossip the new node address between server nodes to ensure
                     // consistency
                     for hash_ring in self.global_hash_rings.values() {
-                        let msg = rmp_serde::to_vec(&join_message)
+                        let msg = rmp_serde::to_vec_named(&join_message)
                             .context("failed to serialize join message")?;
 
                         for node_id in hash_ring.unique_nodes() {
@@ -56,7 +56,7 @@ impl RoutingNode {
                     }
 
                     // tell all worker threads about the message
-                    let serialized = rmp_serde::to_vec(&message)
+                    let serialized = rmp_serde::to_vec_named(&message)
                         .context("failed to serialize Notify message")?;
                     for tid in 1..self.config_data.routing_thread_count {
                         self.zenoh
@@ -100,7 +100,7 @@ impl RoutingNode {
 
                 if self.thread_id == 0 {
                     // tell all worker threads about the message
-                    let serialized = rmp_serde::to_vec(&message)
+                    let serialized = rmp_serde::to_vec_named(&message)
                         .context("failed to serialize Notify message")?;
                     for tid in 1..self.config_data.routing_thread_count {
                         self.zenoh

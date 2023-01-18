@@ -65,7 +65,7 @@ impl KvsNode {
                 {
                     let response_address = self.wt.cache_ip_response_topic(&self.zenoh_prefix);
                     e.insert(Request {
-                        request: vec![KeyOperation::GetMetadata(key)],
+                        inner_operations: vec![KeyOperation::GetMetadata(key)],
                         // NB: response_address might not be necessary here
                         // (or in other places where req_id is constructed either).
                         request_id: Some(format!("{}:{}", response_address, self.request_id)),
@@ -82,7 +82,7 @@ impl KvsNode {
         // Loop over the address request map and execute all the requests.
         for (address, request) in addr_request_map {
             let serialized_req =
-                rmp_serde::to_vec(&request).context("failed to serialize KeyRequest")?;
+                rmp_serde::to_vec_named(&request).context("failed to serialize KeyRequest")?;
             self.zenoh
                 .put(&address, serialized_req)
                 .await

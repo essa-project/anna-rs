@@ -113,7 +113,7 @@ mod tests {
             update.updates.push(rf);
         }
 
-        let serialized = rmp_serde::to_vec(&update).unwrap();
+        let serialized = rmp_serde::to_vec_named(&update).unwrap();
 
         smol::block_on(router.replication_change_handler(&serialized)).unwrap();
 

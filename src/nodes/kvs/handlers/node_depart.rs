@@ -10,7 +10,7 @@ impl KvsNode {
         let work_start = Instant::now();
 
         let serialized =
-            rmp_serde::to_vec(&message).context("failed to serialize Departed message")?;
+            rmp_serde::to_vec_named(&message).context("failed to serialize Departed message")?;
         let messages::Departed {
             tier,
             node_id: departing_node_id,
