@@ -14,7 +14,7 @@ serde = { version = "1.0.126", features = ["derive", "rc"] }
 serde_yaml = "0.8.17"
 argh = "0.1.4"
 eyre = "0.6.5"
-chrono = { version = "0.4.19", features = ["serde"] }
+chrono = { version = "0.4.19", default-features = false, features = ["serde"] }
 bytes = "1.0.1"
 uuid = { version = "1.0.0", features = ["v4"] }
 smol = "1.2.5"
