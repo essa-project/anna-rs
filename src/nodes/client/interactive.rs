@@ -20,7 +20,7 @@ use std::{
 /// for testing.
 ///
 /// To communicate with routing and KVS nodes, the client uses the given zenoh workspace.
-pub fn run_interactive<'a>(
+pub fn run_interactive(
     config: &Config,
     stdin: &mut dyn Read,
     stdout: &mut dyn Write,

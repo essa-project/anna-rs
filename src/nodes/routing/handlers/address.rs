@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 use crate::{
     messages::{AddressRequest, AddressResponse, KeyAddress, TcpMessage},
     nodes::{routing::RoutingNode, send_tcp_message},
@@ -70,10 +68,7 @@ impl RoutingNode {
                             self.pending_requests.entry(key.clone()).or_default().push(
                                 crate::nodes::routing::PendingRequest {
                                     request_id: addr_request.request_id,
-                                    reply_path: addr_request
-                                        .response_address
-                                        .try_into()
-                                        .context("invalid response address")?,
+                                    reply_path: addr_request.response_address,
                                     reply_stream,
                                 },
                             );

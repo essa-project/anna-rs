@@ -381,7 +381,8 @@ impl RoutingNode {
                     request
                         .reply(Ok(Sample::try_from("pong", "pong").unwrap()))
                         .res()
-                        .await;
+                        .await
+                        .map_err(|err| eyre::eyre!(err))?;
                 }
                 Result::<_, eyre::Error>::Ok(())
             })
@@ -437,12 +438,12 @@ impl RoutingNode {
                 }
 
                 query = tcp_addr_request_stream.select_next_some() => {
-                    query.reply(Ok(Sample::new(query.key_expr().to_owned(), tcp_addr_serialized.as_str()))).res().await;
+                    query.reply(Ok(Sample::new(query.key_expr().to_owned(), tcp_addr_serialized.as_str()))).res().await.map_err(|err| eyre::eyre!(err))?;
                 }
                 query = address_request_stream.select_next_some() => {
                     log::info!("handling address request for {}", query.selector());
                     let serialized_reply = self.seed_handler();
-                    query.reply(Ok(Sample::new(query.key_expr().to_owned(), serialized_reply))).res().await;
+                    query.reply(Ok(Sample::new(query.key_expr().to_owned(), serialized_reply))).res().await.map_err(|err| eyre::eyre!(err))?;
                 }
                 sample = notify_stream.select_next_some() => {
                     let parsed = serde_json::from_str(&sample.value.as_string()?)

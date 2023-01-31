@@ -770,7 +770,7 @@ struct PendingGossip {
 }
 
 #[cfg(test)]
-fn kvs_test_instance<'a>(zenoh: Arc<zenoh::Session>, zenoh_prefix: String) -> KvsNode {
+fn kvs_test_instance(zenoh: Arc<zenoh::Session>, zenoh_prefix: String) -> KvsNode {
     let config_data = ConfigData {
         self_tier: Tier::Memory,
         thread_num: 1,

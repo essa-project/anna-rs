@@ -98,6 +98,7 @@ impl ReportData {
     }
 
     /// Starts the next reporting epoch and returns the report messages that should be sent out.
+    #[allow(clippy::too_many_arguments)]
     pub async fn next_epoch(
         &mut self,
         duration: Duration,

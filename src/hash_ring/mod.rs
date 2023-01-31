@@ -171,6 +171,7 @@ impl HashRingUtil {
     /// that corresponds to the given `key`. The response will be sent to the
     /// specified `response_address`. The hash ring parameters are needed for finding
     /// the responsible threads.
+    #[allow(clippy::too_many_arguments)]
     pub async fn issue_replication_factor_request(
         &self,
         response_address: String,

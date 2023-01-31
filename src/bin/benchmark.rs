@@ -68,9 +68,7 @@ fn set_up_logger(thread_id: u32) -> Result<(), fern::InitError> {
         })
         .level(log::LevelFilter::Info)
         .chain(std::io::stdout())
-        .chain(fern::log_file(format!(
-            "benchmark-thread-{thread_id}.log"
-        ))?)
+        .chain(fern::log_file(format!("benchmark-thread-{thread_id}.log"))?)
         .apply()?;
     Ok(())
 }
