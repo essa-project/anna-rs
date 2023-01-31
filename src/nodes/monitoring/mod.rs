@@ -373,7 +373,7 @@ impl<'a> MonitoringNode<'a> {
                     // NB: response_address might not be necessary here
                     // (or in other places where req_id is constructed either).
                     request_id: Some(format!("{}:{}", response_addr, self.request_id)),
-                    response_address: Some(response_addr.to_string()),
+                    response_address: Some(response_addr),
                     address_cache_size: Default::default(),
                 });
                 self.request_id += 1;
@@ -413,7 +413,7 @@ impl<'a> MonitoringNode<'a> {
                     // NB: response_address might not be necessary here
                     // (or in other places where req_id is constructed either).
                     request_id: Some(format!("{}:{}", response_addr, self.request_id)),
-                    response_address: Some(response_addr.to_string()),
+                    response_address: Some(response_addr),
                     address_cache_size: Default::default(),
                 });
                 self.request_id += 1;
@@ -479,7 +479,7 @@ impl<'a> MonitoringNode<'a> {
             .insert(node_id, self.config_data.tier_metadata[&tier].thread_number);
         // the depart done message should be sent to our depart done topic
         let self_depart = SelfDepart {
-            response_topic: self.mt.depart_done_topic(&self.zenoh_prefix).to_string(),
+            response_topic: self.mt.depart_done_topic(&self.zenoh_prefix),
         };
 
         self.zenoh

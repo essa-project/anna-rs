@@ -192,7 +192,7 @@ mod tests {
 
         let key: ClientKey = "key".into();
 
-        let mut router = router_test_instance(zenoh.clone(), zenoh_prefix);
+        let mut router = router_test_instance(zenoh, zenoh_prefix);
         let entry = router.key_replication_map.entry(key.clone()).or_default();
 
         entry.global_replication.insert(Tier::Memory, 1);

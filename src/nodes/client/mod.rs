@@ -125,7 +125,7 @@ impl ClientNode {
             let zenoh = zenoh.clone();
             let (tx, rx) = channel::bounded(10);
             receive_tasks.push(Box::pin(async move {
-                let mut changes = zenoh
+                let changes = zenoh
                     .declare_subscriber(topic)
                     .res()
                     .await
@@ -300,7 +300,7 @@ impl ClientNode {
         let request = ClientRequest {
             key,
             put_value: Some(lattice),
-            response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
+            response_address: self.ut.response_topic(&self.zenoh_prefix),
             request_id: request_id.clone(),
             address_cache_size: HashMap::new(),
             timestamp: Instant::now(),
@@ -327,7 +327,7 @@ impl ClientNode {
         let request = ClientRequest {
             key,
             put_value: None,
-            response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
+            response_address: self.ut.response_topic(&self.zenoh_prefix),
             request_id: request_id.clone(),
             address_cache_size: HashMap::new(),
             timestamp: Instant::now(),
@@ -753,7 +753,7 @@ impl ClientNode {
             response_address: self
                 .ut
                 .address_response_topic(&self.zenoh_prefix)
-                .to_string(),
+                ,
             keys: vec![key.clone()],
         };
 

@@ -251,7 +251,7 @@ impl RoutingNode {
         // subscribe to zenoh topics
         let zenoh = self.zenoh.clone();
 
-        let mut tcp_addr_queryable = zenoh
+        let tcp_addr_queryable = zenoh
             .declare_queryable(&self.rt.tcp_addr_topic(&self.zenoh_prefix))
             .res()
             .await
@@ -261,7 +261,7 @@ impl RoutingNode {
 
         // responsible for sending existing server addresses to a new node (relevant
         // to seed node)
-        let mut address_queryable = zenoh
+        let address_queryable = zenoh
             .declare_queryable(&RoutingThread::seed_topic(&self.zenoh_prefix))
             .res()
             .await
@@ -270,7 +270,7 @@ impl RoutingNode {
         let mut address_request_stream = address_queryable.receiver.into_stream();
 
         // responsible for both node join and departure
-        let mut notify_subscriber = zenoh
+        let notify_subscriber = zenoh
             .declare_subscriber(&self.rt.notify_topic(&self.zenoh_prefix))
             .res()
             .await
@@ -279,7 +279,7 @@ impl RoutingNode {
         let mut notify_stream = notify_subscriber.receiver.into_stream();
 
         // responsible for listening for key replication factor response
-        let mut replication_response_subscriber = zenoh
+        let replication_response_subscriber = zenoh
             .declare_subscriber(&self.rt.replication_response_topic(&self.zenoh_prefix))
             .res()
             .await
@@ -290,7 +290,7 @@ impl RoutingNode {
 
         // responsible for handling key replication factor change requests from server
         // nodes
-        let mut replication_change_subscriber = zenoh
+        let replication_change_subscriber = zenoh
             .declare_subscriber(&self.rt.replication_change_topic(&self.zenoh_prefix))
             .res()
             .await
@@ -299,7 +299,7 @@ impl RoutingNode {
         let mut replication_change_stream = replication_change_subscriber.receiver.into_stream();
 
         // responsible for handling key address request from users
-        let mut key_address_subscriber = zenoh
+        let key_address_subscriber = zenoh
             .declare_subscriber(&self.rt.address_request_topic(&self.zenoh_prefix))
             .res()
             .await
@@ -307,7 +307,7 @@ impl RoutingNode {
             .context("failed to declare key address subscriber")?;
         let mut key_address_stream = key_address_subscriber.receiver.into_stream();
 
-        let mut routing_ad_subscriber = zenoh
+        let routing_ad_subscriber = zenoh
             .declare_subscriber(&RoutingThread::advertisement_topic(&self.zenoh_prefix))
             .res()
             .await
@@ -351,7 +351,7 @@ impl RoutingNode {
         let zenoh = self.zenoh.clone();
         let zenoh_prefix = self.zenoh_prefix.clone();
         std::thread::spawn(move || {
-            let mut ping_subscriber = zenoh::prelude::sync::SyncResolve::res_sync(
+            let ping_subscriber = zenoh::prelude::sync::SyncResolve::res_sync(
                 zenoh.declare_subscriber(&rt.ping_topic(&zenoh_prefix)),
             )
             .map_err(|e| eyre::eyre!(e))
@@ -370,7 +370,7 @@ impl RoutingNode {
         let zenoh = self.zenoh.clone();
         let zenoh_prefix = self.zenoh_prefix.clone();
         std::thread::spawn(move || {
-            let mut ping_subscriber = zenoh::prelude::sync::SyncResolve::res_sync(
+            let ping_subscriber = zenoh::prelude::sync::SyncResolve::res_sync(
                 zenoh.declare_queryable(&rt.ping_topic(&zenoh_prefix)),
             )
             .map_err(|e| eyre::eyre!(e))

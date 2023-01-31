@@ -22,7 +22,7 @@ fn main() -> eyre::Result<()> {
     let args: Args = argh::from_env();
 
     let config: Config = serde_yaml::from_str(
-        &fs::read_to_string(&args.config_file).context("failed to read config file")?,
+        &fs::read_to_string(args.config_file).context("failed to read config file")?,
     )
     .context("failed to parse config file")?;
 

@@ -89,7 +89,7 @@ impl RoutingNode {
                 log::info!("Received depart from server {}.", departed_node_id,);
                 self.global_hash_rings
                     .entry(*tier)
-                    .and_modify(|e| e.remove_node(&departed_node_id));
+                    .and_modify(|e| e.remove_node(departed_node_id));
 
                 for i in 0.. {
                     let departed_thread = KvsThread {
@@ -152,8 +152,8 @@ mod tests {
     fn membership() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .declare_subscriber(format!("{}/**", zenoh_prefix))
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
             .res()
             .unwrap();
 

@@ -150,15 +150,15 @@ mod tests {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
         let self_depart = SelfDepart {
-            response_topic: format!("{}/self_depart_test_response_address", zenoh_prefix),
+            response_topic: format!("{zenoh_prefix}/self_depart_test_response_address"),
         };
 
-        let mut subscriber = zenoh
+        let subscriber = zenoh
             .declare_subscriber(&self_depart.response_topic)
             .res()
             .unwrap();
 
-        let mut server = kvs_test_instance(zenoh.clone(), zenoh_prefix.clone());
+        let mut server = kvs_test_instance(zenoh.clone(), zenoh_prefix);
         assert_eq!(server.global_hash_rings[&Tier::Memory].len(), 3000);
         assert_eq!(
             server.global_hash_rings[&Tier::Memory].unique_nodes().len(),

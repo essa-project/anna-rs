@@ -73,8 +73,8 @@ mod tests {
     fn replication_change() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .declare_subscriber(format!("{}/**", zenoh_prefix))
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
             .res()
             .unwrap();
 
@@ -83,7 +83,7 @@ mod tests {
             .map(|&k| ClientKey::from(k))
             .collect();
 
-        let mut router = router_test_instance(zenoh.clone(), zenoh_prefix.clone());
+        let mut router = router_test_instance(zenoh.clone(), zenoh_prefix);
         router.config_data = Arc::new(ConfigData {
             routing_thread_count: 3,
             ..(*router.config_data).clone()

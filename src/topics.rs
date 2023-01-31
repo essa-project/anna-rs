@@ -263,12 +263,12 @@ impl RoutingThread {
     /// message. Unlike most other messages in this crate, the `"join"` is sent as
     /// zenoh [`get`][zenoh::Workspace::get] requests with an immediate reply.
     pub fn seed_topic(prefix: &str) -> String {
-        format!("{}/{}", prefix, SEED_TOPIC).try_into().unwrap()
+        format!("{prefix}/{SEED_TOPIC}").try_into().unwrap()
     }
 
     /// Each routing node broadcasts its ID on this topic.
     pub fn advertisement_topic(prefix: &str) -> String {
-        format!("{}/{}", prefix, ADVERTISEMENT_TOPIC)
+        format!("{prefix}/{ADVERTISEMENT_TOPIC}")
             .try_into()
             .unwrap()
     }
@@ -368,7 +368,7 @@ impl MonitoringThread {
     ///
     /// Sent messages are of type [`Notify`][crate::messages::Notify].
     pub fn notify_topic(prefix: &str) -> String {
-        format!("{}/{}", prefix, MONITORING_NOTIFY_TOPIC)
+        format!("{prefix}/{MONITORING_NOTIFY_TOPIC}")
             .try_into()
             .unwrap()
     }
@@ -394,7 +394,7 @@ impl MonitoringThread {
     /// Benchmarking nodes send [`UserFeedback`][crate::messages::user_feedback::UserFeedback]
     /// messages to the monitoring nodes on this topic.
     pub fn feedback_report_topic(prefix: &str) -> String {
-        format!("{}/{}", prefix, FEEDBACK_REPORT_TOPIC)
+        format!("{prefix}/{FEEDBACK_REPORT_TOPIC}")
             .try_into()
             .unwrap()
     }
@@ -479,8 +479,7 @@ impl ManagementThread {
 /// Topic on which commands to benchmark nodes are sent.
 pub fn benchmark_topic(thread_id: u32, zenoh_prefix: &str) -> String {
     format!(
-        "{}/benchmark/{}/{}",
-        zenoh_prefix, BENCHMARK_COMMAND_TOPIC, thread_id,
+        "{zenoh_prefix}/benchmark/{BENCHMARK_COMMAND_TOPIC}/{thread_id}",
     )
     .try_into()
     .unwrap()

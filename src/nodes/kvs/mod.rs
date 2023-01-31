@@ -120,7 +120,7 @@ pub fn run(
                 .await?;
                 node.run(shutdown.next().map(|_| ()))
                     .await
-                    .context(format!("KVS thread {}/{} failed", node_id, thread_id))
+                    .context(format!("KVS thread {node_id}/{thread_id} failed"))
             };
             s.spawn(move |_| {
                 smol::block_on(async {

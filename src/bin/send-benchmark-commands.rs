@@ -128,7 +128,7 @@ fn main() -> eyre::Result<()> {
                 .map_err(|e| eyre::eyre!(e))?;
         }
         Command::Exit(ExitCommand {}) => {
-            let serialized = format!("EXIT");
+            let serialized = "EXIT".to_string();
             zenoh
                 .put(&benchmark_topic(args.thread_id, zenoh_prefix), serialized)
                 .res()

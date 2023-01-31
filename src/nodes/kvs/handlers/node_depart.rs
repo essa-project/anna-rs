@@ -77,8 +77,8 @@ mod tests {
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
 
         let zenoh_clone = zenoh.clone();
-        let mut subscriber = zenoh_clone
-            .declare_subscriber(format!("{}/**", zenoh_prefix))
+        let subscriber = zenoh_clone
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
             .res()
             .unwrap();
 

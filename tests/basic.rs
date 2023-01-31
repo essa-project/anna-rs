@@ -84,8 +84,8 @@ fn get_set() {
         &mut stdout,
         &mut stderr,
         true,
-        zenoh.clone(),
-        zenoh_prefix.clone(),
+        zenoh,
+        zenoh_prefix,
     )
     .unwrap();
     assert_eq!(String::from_utf8(stderr.into_inner()).unwrap(), "");

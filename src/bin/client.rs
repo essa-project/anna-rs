@@ -42,7 +42,7 @@ fn main() -> eyre::Result<()> {
 
     let mut input = args
         .input_file
-        .map(|path| File::open(&path).context("failed to open input file"))
+        .map(|path| File::open(path).context("failed to open input file"))
         .transpose()?
         .map(|r| {
             let boxed: Box<dyn Read> = Box::new(r);

@@ -206,7 +206,7 @@ mod tests {
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)
-                    .to_string(),
+                    ,
             ),
             request_id: Some(request_id),
             address_cache_size: Default::default(),
@@ -230,7 +230,7 @@ mod tests {
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)
-                    .to_string(),
+                    ,
             ),
             request_id: Some(request_id),
             address_cache_size: Default::default(),
@@ -241,8 +241,8 @@ mod tests {
     fn user_get_lww_test() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .declare_subscriber(format!("{}/**", zenoh_prefix))
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
             .res()
             .unwrap();
 
@@ -291,8 +291,8 @@ mod tests {
     fn user_get_set_test() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .declare_subscriber(format!("{}/**", zenoh_prefix))
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
             .res()
             .unwrap();
 
@@ -350,8 +350,8 @@ mod tests {
     fn user_get_ordered_set_test() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .declare_subscriber(format!("{}/**", zenoh_prefix))
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
             .res()
             .unwrap();
 
@@ -413,8 +413,8 @@ mod tests {
     fn user_get_causal_test() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .declare_subscriber(format!("{}/**", zenoh_prefix))
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
             .res()
             .unwrap();
 
@@ -481,8 +481,8 @@ mod tests {
     fn user_put_and_get_lww_test() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .declare_subscriber(format!("{}/**", zenoh_prefix))
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
             .res()
             .unwrap();
 
@@ -561,8 +561,8 @@ mod tests {
     fn user_put_and_get_set_test() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .declare_subscriber(format!("{}/**", zenoh_prefix))
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
             .res()
             .unwrap();
 
@@ -641,8 +641,8 @@ mod tests {
     fn user_put_and_get_ordered_set_test() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .declare_subscriber(format!("{}/**", zenoh_prefix))
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
             .res()
             .unwrap();
 
@@ -729,8 +729,8 @@ mod tests {
     fn user_put_and_get_causal_test() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .declare_subscriber(format!("{}/**", zenoh_prefix))
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
             .res()
             .unwrap();
 

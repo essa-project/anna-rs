@@ -47,7 +47,7 @@ fn main() -> eyre::Result<()> {
         .enumerate()
     {
         match thread.join() {
-            Ok(result) => result.with_context(|| format!("thread {} failed", thread_id))?,
+            Ok(result) => result.with_context(|| format!("thread {thread_id} failed"))?,
             Err(panic_payload) => std::panic::resume_unwind(panic_payload),
         }
     }
@@ -69,8 +69,7 @@ fn set_up_logger(thread_id: u32) -> Result<(), fern::InitError> {
         .level(log::LevelFilter::Info)
         .chain(std::io::stdout())
         .chain(fern::log_file(format!(
-            "benchmark-thread-{}.log",
-            thread_id
+            "benchmark-thread-{thread_id}.log"
         ))?)
         .apply()?;
     Ok(())
@@ -95,7 +94,7 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
 
     let timeout = Duration::from_secs(10);
 
-    let cluster_info = smol::block_on(request_cluster_info(&zenoh, &zenoh_prefix))?;
+    let cluster_info = smol::block_on(request_cluster_info(&zenoh, zenoh_prefix))?;
     let routing_ips = cluster_info.routing_node_ids.iter(); // TODO: also consider config.user.routing-elb
     let routing_threads: Vec<_> = routing_ips
         .flat_map(|id| (0..config.threads.routing).map(move |i| RoutingThread::new(id.clone(), i)))
@@ -111,7 +110,7 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
     )?;
     smol::block_on(client.init_tcp_connections())?;
 
-    let mut commands = zenoh
+    let commands = zenoh
         .declare_subscriber(&benchmark_topic(thread_id, zenoh_prefix))
         .res()
         .map_err(|e| eyre::eyre!(e))
@@ -281,7 +280,7 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
                         let latency = 1000000.0 / throughput;
 
                         let mut feedback = UserFeedback {
-                            uid: format!("{}:{}", node_id, thread_id),
+                            uid: format!("{node_id}:{thread_id}"),
                             latency,
                             throughput,
                             finish: Default::default(),
@@ -324,7 +323,7 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
                 log::info!("Finished");
 
                 let feedback = UserFeedback {
-                    uid: format!("{}:{}", node_id, thread_id),
+                    uid: format!("{node_id}:{thread_id}"),
                     finish: true,
                     latency: Default::default(),
                     throughput: Default::default(),
@@ -453,5 +452,5 @@ fn sample(n: usize, sum_probs: &HashMap<usize, f64>) -> usize {
 }
 
 fn generate_key(n: usize) -> ClientKey {
-    format!("{:08}", n).into()
+    format!("{n:08}").into()
 }

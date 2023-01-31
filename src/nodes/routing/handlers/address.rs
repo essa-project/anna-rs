@@ -147,8 +147,8 @@ mod tests {
     fn address() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .declare_subscriber(format!("{}/**", zenoh_prefix))
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
             .res()
             .unwrap();
 

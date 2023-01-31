@@ -46,7 +46,7 @@ fn main() -> eyre::Result<()> {
     );
     let zenoh_prefix = anna_default_zenoh_prefix();
 
-    let cluster_info = smol::block_on(request_cluster_info(&zenoh, &zenoh_prefix))?;
+    let cluster_info = smol::block_on(request_cluster_info(&zenoh, zenoh_prefix))?;
 
     let routing_thread = RoutingThread::new(
         cluster_info
@@ -58,7 +58,7 @@ fn main() -> eyre::Result<()> {
     );
     let routing_node_tcp = {
         let reply = {
-            let topic = routing_thread.tcp_addr_topic(&zenoh_prefix);
+            let topic = routing_thread.tcp_addr_topic(zenoh_prefix);
             let receiver = zenoh
                 .get(&topic)
                 .res()
@@ -92,7 +92,7 @@ fn main() -> eyre::Result<()> {
             routing_thread.clone(),
             routing_node_tcp,
         );
-        println!("  average latency: {:?}", latency);
+        println!("  average latency: {latency:?}");
         println!("  total time: {:?}", Instant::now() - start);
         println!(
             "  throughput: {:?} msg/s",
@@ -109,7 +109,7 @@ fn main() -> eyre::Result<()> {
             routing_thread.clone(),
             routing_node_tcp,
         );
-        println!("  average latency: {:?}", latency);
+        println!("  average latency: {latency:?}");
         println!("  total time: {:?}", Instant::now() - start);
         println!(
             "  throughput: {:?} msg/s",
@@ -126,7 +126,7 @@ fn main() -> eyre::Result<()> {
             routing_thread,
             routing_node_tcp,
         );
-        println!("  average latency: {:?}", latency);
+        println!("  average latency: {latency:?}");
         println!("  total time: {:?}", Instant::now() - start);
         println!(
             "  throughput: {:?} msg/s",
@@ -149,9 +149,9 @@ fn main() -> eyre::Result<()> {
                 "zenoh pub/sub",
             ),
         ] {
-            eprintln!("{}:", name);
+            eprintln!("{name}:");
             for thread_num in [1, 2, 4, 8, 16, 32, 64, 128, 256, 512] {
-                eprintln!("  threads: {}", thread_num);
+                eprintln!("  threads: {thread_num}");
                 for iteration_num in [1, 10, 100, 1000, 10000] {
                     if thread_num >= 64 && iteration_num >= 10000 {
                         continue; // skip
@@ -166,7 +166,7 @@ fn main() -> eyre::Result<()> {
                         continue; // skip
                     }
 
-                    eprint!("    iterations: {}", iteration_num);
+                    eprint!("    iterations: {iteration_num}");
 
                     let latency = f(
                         thread_num,
@@ -176,7 +176,7 @@ fn main() -> eyre::Result<()> {
                         routing_thread.clone(),
                         routing_node_tcp,
                     );
-                    eprintln!(" -> {:?}", latency);
+                    eprintln!(" -> {latency:?}");
 
                     map.insert((thread_num, iteration_num), latency);
                 }
@@ -258,8 +258,8 @@ fn run_tcp(
         }));
     }
     let latency_sum: Duration = threads.into_iter().map(|t| t.join().unwrap()).sum();
-    let latency_avg = latency_sum / thread_num;
-    latency_avg
+    
+    latency_sum / thread_num
 }
 
 fn run_zenoh_query(
@@ -302,8 +302,8 @@ fn run_zenoh_query(
         }));
     }
     let latency_sum: Duration = threads.into_iter().map(|t| t.join().unwrap()).sum();
-    let latency_avg = latency_sum / thread_num;
-    latency_avg
+    
+    latency_sum / thread_num
 }
 
 fn run_zenoh_pub_sub(
@@ -323,8 +323,8 @@ fn run_zenoh_pub_sub(
 
         threads.push(thread::spawn(move || {
             let start = Instant::now();
-            let reply_topic = format!("{}/{}", zenoh_prefix, uuid::Uuid::new_v4().to_string());
-            let mut reply_subscriber = zenoh
+            let reply_topic = format!("{}/{}", zenoh_prefix, uuid::Uuid::new_v4());
+            let reply_subscriber = zenoh
                 .declare_subscriber(reply_topic.as_str())
                 .res()
                 .unwrap();
@@ -352,8 +352,8 @@ fn run_zenoh_pub_sub(
         }));
     }
     let latency_sum: Duration = threads.into_iter().map(|t| t.join().unwrap()).sum();
-    let latency_avg = latency_sum / thread_num;
-    latency_avg
+    
+    latency_sum / thread_num
 }
 
 fn set_up_logger() -> Result<(), fern::InitError> {

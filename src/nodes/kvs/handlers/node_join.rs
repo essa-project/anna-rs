@@ -177,8 +177,8 @@ mod tests {
     fn basic_node_join() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .declare_subscriber(format!("{}/**", zenoh_prefix))
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
             .res()
             .unwrap();
 
@@ -235,7 +235,7 @@ mod tests {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
 
-        let mut server = kvs_test_instance(zenoh.clone(), zenoh_prefix);
+        let mut server = kvs_test_instance(zenoh, zenoh_prefix);
 
         assert_eq!(server.global_hash_rings[&Tier::Memory].len(), 3000);
         assert_eq!(

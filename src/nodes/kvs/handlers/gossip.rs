@@ -139,7 +139,7 @@ mod tests {
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)
-                    .to_string(),
+                    ,
             ),
             request_id: Some("0".to_owned()),
             address_cache_size: Default::default(),
@@ -186,7 +186,7 @@ mod tests {
         let key: ClientKey = "key".into();
         let mut value = "value1".as_bytes().to_owned();
 
-        let mut server = kvs_test_instance(zenoh.clone(), zenoh_prefix.clone());
+        let mut server = kvs_test_instance(zenoh, zenoh_prefix.clone());
         server.key_replication_map.entry(key.clone()).or_default();
         server
             .kvs
