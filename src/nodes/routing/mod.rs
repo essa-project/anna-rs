@@ -23,7 +23,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use zenoh::prelude::{Sample, ZFuture};
+use zenoh::prelude::{r#async::AsyncResolve, Sample};
 
 mod handlers;
 
@@ -200,6 +200,7 @@ impl RoutingNode {
                     serde_json::to_string(&message)
                         .context("failed to serialize notify message")?,
                 )
+                .res()
                 .await
                 .map_err(|e| eyre::eyre!(e))
                 .context("failed to send join to monitoring nodes")?;
@@ -224,6 +225,7 @@ impl RoutingNode {
                                 serde_json::to_string(&message)
                                     .context("failed to serialize notify message")?,
                             )
+                            .res()
                             .await
                             .map_err(|e| eyre::eyre!(e))
                             .context("failed to send advertisement message")?;
@@ -250,60 +252,68 @@ impl RoutingNode {
         let zenoh = self.zenoh.clone();
 
         let mut tcp_addr_queryable = zenoh
-            .queryable(&self.rt.tcp_addr_topic(&self.zenoh_prefix))
+            .declare_queryable(&self.rt.tcp_addr_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre::eyre!(e))
             .context("failed to declare tcp_port queryable")?;
-        let mut tcp_addr_request_stream = tcp_addr_queryable.receiver().fuse();
+        let mut tcp_addr_request_stream = tcp_addr_queryable.receiver.into_stream();
 
         // responsible for sending existing server addresses to a new node (relevant
         // to seed node)
         let mut address_queryable = zenoh
-            .queryable(&RoutingThread::seed_topic(&self.zenoh_prefix))
+            .declare_queryable(&RoutingThread::seed_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre::eyre!(e))
             .context("failed to declare address queryable")?;
-        let mut address_request_stream = address_queryable.receiver().fuse();
+        let mut address_request_stream = address_queryable.receiver.into_stream();
 
         // responsible for both node join and departure
         let mut notify_subscriber = zenoh
-            .subscribe(&self.rt.notify_topic(&self.zenoh_prefix))
+            .declare_subscriber(&self.rt.notify_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre::eyre!(e))
             .context("failed to declare notify subscriber")?;
-        let mut notify_stream = notify_subscriber.receiver().fuse();
+        let mut notify_stream = notify_subscriber.receiver.into_stream();
 
         // responsible for listening for key replication factor response
         let mut replication_response_subscriber = zenoh
-            .subscribe(&self.rt.replication_response_topic(&self.zenoh_prefix))
+            .declare_subscriber(&self.rt.replication_response_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre::eyre!(e))
             .context("failed to declare replication response subscriber")?;
-        let mut replication_response_stream = replication_response_subscriber.receiver().fuse();
+        let mut replication_response_stream =
+            replication_response_subscriber.receiver.into_stream();
 
         // responsible for handling key replication factor change requests from server
         // nodes
         let mut replication_change_subscriber = zenoh
-            .subscribe(&self.rt.replication_change_topic(&self.zenoh_prefix))
+            .declare_subscriber(&self.rt.replication_change_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre::eyre!(e))
             .context("failed to declare replication change subscriber")?;
-        let mut replication_change_stream = replication_change_subscriber.receiver().fuse();
+        let mut replication_change_stream = replication_change_subscriber.receiver.into_stream();
 
         // responsible for handling key address request from users
         let mut key_address_subscriber = zenoh
-            .subscribe(&self.rt.address_request_topic(&self.zenoh_prefix))
+            .declare_subscriber(&self.rt.address_request_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre::eyre!(e))
             .context("failed to declare key address subscriber")?;
-        let mut key_address_stream = key_address_subscriber.receiver().fuse();
+        let mut key_address_stream = key_address_subscriber.receiver.into_stream();
 
         let mut routing_ad_subscriber = zenoh
-            .subscribe(&RoutingThread::advertisement_topic(&self.zenoh_prefix))
+            .declare_subscriber(&RoutingThread::advertisement_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre::eyre!(e))
             .context("failed to declare advertisement subscriber")?;
-        let mut routing_ad_stream = routing_ad_subscriber.receiver().fuse();
+        let mut routing_ad_stream = routing_ad_subscriber.receiver.into_stream();
 
         // create TCP listener
         let listen_port = self
@@ -341,17 +351,17 @@ impl RoutingNode {
         let zenoh = self.zenoh.clone();
         let zenoh_prefix = self.zenoh_prefix.clone();
         std::thread::spawn(move || {
-            let mut ping_subscriber = zenoh
-                .subscribe(&rt.ping_topic(&zenoh_prefix))
-                .wait()
-                .map_err(|e| eyre::eyre!(e))
-                .context("failed to declare key address subscriber")?;
+            let mut ping_subscriber = zenoh::prelude::sync::SyncResolve::res_sync(
+                zenoh.declare_subscriber(&rt.ping_topic(&zenoh_prefix)),
+            )
+            .map_err(|e| eyre::eyre!(e))
+            .context("failed to declare key address subscriber")?;
 
-            for sample in ping_subscriber.receiver().iter() {
-                zenoh
-                    .put(sample.value.as_string()?, "pong")
-                    .wait()
-                    .map_err(|e| eyre::eyre!(e))?;
+            for sample in ping_subscriber.receiver.iter() {
+                zenoh::prelude::sync::SyncResolve::res_sync(
+                    zenoh.put(sample.value.as_string()?, "pong"),
+                )
+                .map_err(|e| eyre::eyre!(e))?;
             }
             Result::<_, eyre::Error>::Ok(())
         });
@@ -360,15 +370,18 @@ impl RoutingNode {
         let zenoh = self.zenoh.clone();
         let zenoh_prefix = self.zenoh_prefix.clone();
         std::thread::spawn(move || {
-            let mut ping_subscriber = zenoh
-                .queryable(&rt.ping_topic(&zenoh_prefix))
-                .wait()
-                .map_err(|e| eyre::eyre!(e))
-                .context("failed to declare key address subscriber")?;
+            let mut ping_subscriber = zenoh::prelude::sync::SyncResolve::res_sync(
+                zenoh.declare_queryable(&rt.ping_topic(&zenoh_prefix)),
+            )
+            .map_err(|e| eyre::eyre!(e))
+            .context("failed to declare key address subscriber")?;
 
             smol::block_on(async {
-                while let Some(request) = ping_subscriber.receiver().next().await {
-                    request.reply_async(Sample::new("pong", "pong")).await;
+                while let Ok(request) = ping_subscriber.receiver.recv_async().await {
+                    request
+                        .reply(Ok(Sample::try_from("pong", "pong").unwrap()))
+                        .res()
+                        .await;
                 }
                 Result::<_, eyre::Error>::Ok(())
             })
@@ -424,12 +437,12 @@ impl RoutingNode {
                 }
 
                 query = tcp_addr_request_stream.select_next_some() => {
-                    query.reply_async(Sample::new(query.key_selector().to_owned(), tcp_addr_serialized.as_str())).await;
+                    query.reply(Ok(Sample::new(query.key_expr().to_owned(), tcp_addr_serialized.as_str()))).res().await;
                 }
                 query = address_request_stream.select_next_some() => {
                     log::info!("handling address request for {}", query.selector());
                     let serialized_reply = self.seed_handler();
-                    query.reply_async(Sample::new(query.key_selector().to_owned(), serialized_reply)).await;
+                    query.reply(Ok(Sample::new(query.key_expr().to_owned(), serialized_reply))).res().await;
                 }
                 sample = notify_stream.select_next_some() => {
                     let parsed = serde_json::from_str(&sample.value.as_string()?)

@@ -25,6 +25,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use zenoh::prelude::r#async::AsyncResolve;
 
 const MONITORING_PERIOD: Duration = Duration::from_secs(30);
 /// Defines the grace period for triggering actions to prevent over-correction.
@@ -118,7 +119,7 @@ pub struct MonitoringNode<'a> {
 
     zenoh: Arc<zenoh::Session>,
     zenoh_prefix: String,
-    responses: zenoh::subscriber::Subscriber<'a>,
+    responses: zenoh::subscriber::FlumeSubscriber<'a>,
 
     departing_node_map: HashMap<String, u32>,
     grace_start: Instant,
@@ -173,7 +174,8 @@ impl MonitoringNode<'static> {
 
         let zenoh_clone = zenoh.clone();
         let responses = zenoh_clone
-            .subscribe(&mt.response_topic(&zenoh_prefix))
+            .declare_subscriber(&mt.response_topic(&zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre!(e))
             .context("failed to declare notify subscriber")?;
@@ -251,28 +253,31 @@ impl<'a> MonitoringNode<'a> {
         let zenoh = self.zenoh.clone();
 
         // responsible for both node join and departure
-        let mut notify_subscriber = zenoh
-            .subscribe(&MonitoringThread::notify_topic(&self.zenoh_prefix))
+        let notify_subscriber = zenoh
+            .declare_subscriber(&MonitoringThread::notify_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre::eyre!(e))
             .context("failed to declare notify subscriber")?;
-        let mut notify_stream = notify_subscriber.receiver().fuse();
+        let mut notify_stream = notify_subscriber.receiver.into_stream();
 
         // responsible for receiving depart done notice
-        let mut depart_done_subscriber = zenoh
-            .subscribe(&self.mt.depart_done_topic(&self.zenoh_prefix))
+        let depart_done_subscriber = zenoh
+            .declare_subscriber(&self.mt.depart_done_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre::eyre!(e))
             .context("failed to declare depart_done subscriber")?;
-        let mut depart_done_stream = depart_done_subscriber.receiver().fuse();
+        let mut depart_done_stream = depart_done_subscriber.receiver.into_stream();
 
         // responsible for receiving feedback from users
-        let mut feedback_subscriber = zenoh
-            .subscribe(&MonitoringThread::feedback_report_topic(&self.zenoh_prefix))
+        let feedback_subscriber = zenoh
+            .declare_subscriber(&MonitoringThread::feedback_report_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre::eyre!(e))
             .context("failed to declare notify subscriber")?;
-        let mut feedback_stream = feedback_subscriber.receiver().fuse();
+        let mut feedback_stream = feedback_subscriber.receiver.into_stream();
 
         loop {
             futures::select! {
@@ -420,10 +425,10 @@ impl<'a> MonitoringNode<'a> {
     async fn wait_for_response(&mut self) -> eyre::Result<Response> {
         let raw_response = self
             .responses
-            .receiver()
-            .next()
+            .receiver
+            .recv_async()
             .await
-            .ok_or_else(|| anyhow!("response stream closed unexpectedly"))?;
+            .map_err(|_| anyhow!("response stream closed unexpectedly"))?;
         let response: Response = serde_json::from_str(&raw_response.value.as_string()?)?;
 
         response.error?;
@@ -453,6 +458,7 @@ impl<'a> MonitoringNode<'a> {
                     &management_node.add_nodes_topic(&self.zenoh_prefix),
                     serde_json::to_string(&AddNodes { tier, number })?,
                 )
+                .res()
                 .await
                 .map_err(|e| eyre::eyre!(e))?;
         } else {
@@ -478,6 +484,7 @@ impl<'a> MonitoringNode<'a> {
 
         self.zenoh
             .put(&connection_addr, serde_json::to_string(&self_depart)?)
+            .res()
             .await
             .map_err(|e| eyre::eyre!(e))?;
 
@@ -544,6 +551,7 @@ impl<'a> MonitoringNode<'a> {
                 serde_json::to_string(&request).context("failed to serialize KeyRequest")?;
             self.zenoh
                 .put(&address, serialized_req)
+                .res()
                 .await
                 .map_err(|e| eyre::eyre!(e))?;
 
@@ -632,6 +640,7 @@ impl<'a> MonitoringNode<'a> {
             let serialized = serde_json::to_string(&rep_factor)?;
             self.zenoh
                 .put(&addr, serialized)
+                .res()
                 .await
                 .map_err(|e| eyre::eyre!(e))?;
         }

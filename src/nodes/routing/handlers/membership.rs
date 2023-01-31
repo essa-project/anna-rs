@@ -6,6 +6,7 @@ use crate::{
     ALL_TIERS,
 };
 use eyre::Context;
+use zenoh::prelude::r#async::AsyncResolve;
 
 impl RoutingNode {
     /// Handles incoming [`Notify`][crate::messages::Notify] messages.
@@ -48,6 +49,7 @@ impl RoutingNode {
                                             .node_join_topic(&self.zenoh_prefix),
                                         msg.as_str(),
                                     )
+                                    .res()
                                     .await
                                     .map_err(|e| eyre::eyre!(e))
                                     .context("failed to send ip of newly joined node")?;
@@ -65,6 +67,7 @@ impl RoutingNode {
                                     .notify_topic(&self.zenoh_prefix),
                                 serialized.as_str(),
                             )
+                            .res()
                             .await
                             .map_err(|e| eyre::eyre!(e))
                             .context("failed to forward join message to worker threads")?;
@@ -109,6 +112,7 @@ impl RoutingNode {
                                     .notify_topic(&self.zenoh_prefix),
                                 serialized.as_str(),
                             )
+                            .res()
                             .await
                             .map_err(|e| eyre::eyre!(e))
                             .context("failed to forward depart message to worker threads")?;
@@ -134,7 +138,8 @@ impl RoutingNode {
 
 #[cfg(test)]
 mod tests {
-    use zenoh::prelude::{Receiver, ZFuture};
+
+    use zenoh::prelude::sync::SyncResolve;
 
     use crate::{
         messages::{self, Tier},
@@ -148,8 +153,8 @@ mod tests {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
         let mut subscriber = zenoh
-            .subscribe(format!("{}/**", zenoh_prefix))
-            .wait()
+            .declare_subscriber(format!("{}/**", zenoh_prefix))
+            .res()
             .unwrap();
 
         let mut router = router_test_instance(zenoh.clone(), zenoh_prefix);
@@ -170,7 +175,7 @@ mod tests {
 
         let message: messages::Join = {
             let sample = subscriber
-                .receiver()
+                .receiver
                 .recv_timeout(Duration::from_secs(10))
                 .unwrap();
             serde_json::from_str(&sample.value.as_string().unwrap()).unwrap()

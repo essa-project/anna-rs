@@ -3,6 +3,7 @@ use crate::{
     Key, ALL_TIERS,
 };
 use eyre::Context;
+use zenoh::prelude::r#async::AsyncResolve;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -24,6 +25,7 @@ impl KvsNode {
                             .replication_change_topic(&self.zenoh_prefix),
                         serialized,
                     )
+                    .res()
                     .await
                     .map_err(|e| eyre::eyre!(e))?;
             }

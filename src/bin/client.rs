@@ -8,7 +8,7 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
-use zenoh::prelude::ZFuture;
+use zenoh::prelude::sync::SyncResolve;
 
 #[derive(FromArgs)]
 /// Rusty anna client
@@ -36,7 +36,7 @@ fn main() -> eyre::Result<()> {
     .context("failed to parse config file")?;
 
     let zenoh = zenoh::open(zenoh::config::Config::default())
-        .wait()
+        .res()
         .map_err(|e| eyre::eyre!(e))?;
     let zenoh_prefix = anna_default_zenoh_prefix();
 

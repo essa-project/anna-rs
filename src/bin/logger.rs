@@ -1,14 +1,12 @@
-use zenoh::prelude::{SplitBuffer, ZFuture};
+use zenoh::prelude::{sync::SyncResolve, SplitBuffer};
 
 fn main() {
-    let zenoh = zenoh::open(zenoh::config::Config::default())
-        .wait()
-        .unwrap();
+    let zenoh = zenoh::open(zenoh::config::Config::default()).res().unwrap();
 
     let topic = std::env::args().skip(1).next().unwrap_or("/**".into());
-    let mut sub = zenoh.subscribe(topic).wait().unwrap();
+    let mut sub = zenoh.declare_subscriber(topic).res().unwrap();
 
-    for sample in sub.receiver().iter() {
+    for sample in sub.receiver.iter() {
         let value = match String::from_utf8(sample.value.payload.contiguous().into_owned()) {
             Err(_) => "<invalid UTF8>".to_string(),
             Ok(v) => v.to_string(),

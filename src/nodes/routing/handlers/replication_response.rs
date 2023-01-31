@@ -9,6 +9,7 @@ use crate::{
     AnnaError, ClientKey, Key, ALL_TIERS,
 };
 use eyre::{anyhow, bail, Context};
+use zenoh::prelude::r#async::AsyncResolve;
 
 impl RoutingNode {
     /// Handles incoming replication response messages.
@@ -143,6 +144,7 @@ impl RoutingNode {
                         .context("failed to serialize KeyAddressResponse")?;
                     self.zenoh
                         .put(&pending_key_req.reply_path.clone(), serialized)
+                        .res()
                         .await
                         .map_err(|e| eyre::eyre!(e))
                         .context("failed to send key address response")?;

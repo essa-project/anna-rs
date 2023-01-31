@@ -27,7 +27,7 @@ pub use anna_api::{lattice, AnnaError, ClientKey};
 use eyre::anyhow;
 use messages::Tier;
 use metadata::MetadataKey;
-use zenoh::prelude::{SplitBuffer, ZFuture};
+use zenoh::prelude::SplitBuffer;
 
 pub mod nodes;
 
@@ -107,9 +107,10 @@ pub fn zenoh_test_instance() -> Arc<zenoh::Session> {
     static TEST_ZENOH: once_cell::sync::Lazy<Arc<zenoh::Session>> =
         once_cell::sync::Lazy::new(|| {
             Arc::new(
-                zenoh::open(zenoh::config::Config::default())
-                    .wait()
-                    .expect("failed to open zenoh session"),
+                zenoh::prelude::sync::SyncResolve::res(zenoh::open(
+                    zenoh::config::Config::default(),
+                ))
+                .expect("failed to open zenoh session"),
             )
         });
     TEST_ZENOH.clone()

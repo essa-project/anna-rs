@@ -4,6 +4,7 @@ use crate::{
 };
 use eyre::{bail, Context};
 use std::{collections::HashMap, time::Instant};
+use zenoh::prelude::r#async::AsyncResolve;
 
 impl KvsNode {
     /// Handles incoming gossip messages.
@@ -98,6 +99,7 @@ impl KvsNode {
                 serde_json::to_string(&key_request).context("failed to serialize KeyRequest")?;
             self.zenoh
                 .put(&address, serialized)
+                .res()
                 .await
                 .map_err(|e| eyre::eyre!(e))?;
         }

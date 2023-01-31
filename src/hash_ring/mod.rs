@@ -12,6 +12,7 @@ use eyre::{anyhow, eyre, Context};
 use rand::prelude::SliceRandom;
 use smol::net::TcpStream;
 use std::collections::{HashMap, HashSet};
+use zenoh::prelude::r#async::AsyncResolve;
 
 mod consistent_hash_map;
 
@@ -212,6 +213,7 @@ impl HashRingUtil {
 
             zenoh
                 .put(&target_address, serialized)
+                .res()
                 .await
                 .map_err(|e| eyre!(e))
                 .context("failed to send replication factor request")?;

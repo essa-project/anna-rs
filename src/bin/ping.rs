@@ -17,7 +17,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use zenoh::prelude::{Receiver, ZFuture};
+use zenoh::prelude::sync::SyncResolve;
 
 #[derive(FromArgs)]
 /// Rusty anna client
@@ -41,7 +41,7 @@ fn main() -> eyre::Result<()> {
 
     let zenoh = Arc::new(
         zenoh::open(zenoh::config::Config::default())
-            .wait()
+            .res()
             .map_err(|e| eyre!(e))?,
     );
     let zenoh_prefix = anna_default_zenoh_prefix();
@@ -61,13 +61,19 @@ fn main() -> eyre::Result<()> {
             let topic = routing_thread.tcp_addr_topic(&zenoh_prefix);
             let receiver = zenoh
                 .get(&topic)
-                .wait()
+                .res()
                 .map_err(|e| eyre!(e))
                 .context("failed to query tcp address of routing thread")?;
             receiver.recv()?
         };
-        let parsed: smol::net::SocketAddr = serde_json::from_str(&reply.sample.value.as_string()?)
-            .context("failed to deserialize tcp addr reply")?;
+        let parsed: smol::net::SocketAddr = serde_json::from_str(
+            &reply
+                .sample
+                .map_err(|err| eyre::eyre!(err))?
+                .value
+                .as_string()?,
+        )
+        .context("failed to deserialize tcp addr reply")?;
 
         parsed
     };
@@ -278,11 +284,13 @@ fn run_zenoh_query(
 
                 let reply = zenoh
                     .get(&routing_thread.ping_topic(&zenoh_prefix))
-                    .wait()
+                    .res()
                     .unwrap()
                     .recv()
                     .unwrap()
                     .sample
+                    .map_err(|err| eyre::eyre!(err))
+                    .unwrap()
                     .value
                     .as_string()
                     .unwrap();
@@ -316,7 +324,10 @@ fn run_zenoh_pub_sub(
         threads.push(thread::spawn(move || {
             let start = Instant::now();
             let reply_topic = format!("{}/{}", zenoh_prefix, uuid::Uuid::new_v4().to_string());
-            let mut reply_subscriber = zenoh.subscribe(reply_topic.as_str()).wait().unwrap();
+            let mut reply_subscriber = zenoh
+                .declare_subscriber(reply_topic.as_str())
+                .res()
+                .unwrap();
             let mut latency_sum = Instant::now() - start;
             for _ in 0..iteration_num {
                 let start = Instant::now();
@@ -325,10 +336,10 @@ fn run_zenoh_pub_sub(
                         &routing_thread.ping_topic(&zenoh_prefix),
                         reply_topic.as_str(),
                     )
-                    .wait()
+                    .res()
                     .unwrap();
                 let reply = reply_subscriber
-                    .receiver()
+                    .receiver
                     .recv()
                     .unwrap()
                     .value

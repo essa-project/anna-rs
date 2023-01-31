@@ -1,6 +1,6 @@
 use anna::{anna_default_zenoh_prefix, topics::benchmark_topic};
 use std::{fmt::Display, str::FromStr};
-use zenoh::prelude::ZFuture;
+use zenoh::prelude::sync::SyncResolve;
 
 /// Sends a benchmark command to a benchmark node.
 #[derive(argh::FromArgs)]
@@ -98,14 +98,16 @@ fn main() -> eyre::Result<()> {
     let args: Args = argh::from_env();
 
     let zenoh = zenoh::open(zenoh::config::Config::default())
-        .wait()
+        .res()
         .map_err(|e| eyre::eyre!(e))?;
     let zenoh_prefix = anna_default_zenoh_prefix();
 
     match args.command {
         Command::Cache(command) => {
             let serialized = format!("CACHE:{}", command.num_keys);
-            smol::block_on(zenoh.put(&benchmark_topic(args.thread_id, zenoh_prefix), serialized))
+            zenoh
+                .put(&benchmark_topic(args.thread_id, zenoh_prefix), serialized)
+                .res()
                 .map_err(|e| eyre::eyre!(e))?;
         }
         Command::Load(c) => {
@@ -113,17 +115,23 @@ fn main() -> eyre::Result<()> {
                 "LOAD:{}:{}:{}:{}:{}:{}",
                 c.ty, c.num_keys, c.len, c.report_period_secs, c.time_secs, c.zipf
             );
-            smol::block_on(zenoh.put(&benchmark_topic(args.thread_id, zenoh_prefix), serialized))
+            zenoh
+                .put(&benchmark_topic(args.thread_id, zenoh_prefix), serialized)
+                .res()
                 .map_err(|e| eyre::eyre!(e))?;
         }
         Command::Warm(c) => {
             let serialized = format!("WARM:{}:{}:{}", c.num_keys, c.len, c.total_threads);
-            smol::block_on(zenoh.put(&benchmark_topic(args.thread_id, zenoh_prefix), serialized))
+            zenoh
+                .put(&benchmark_topic(args.thread_id, zenoh_prefix), serialized)
+                .res()
                 .map_err(|e| eyre::eyre!(e))?;
         }
         Command::Exit(ExitCommand {}) => {
             let serialized = format!("EXIT");
-            smol::block_on(zenoh.put(&benchmark_topic(args.thread_id, zenoh_prefix), serialized))
+            zenoh
+                .put(&benchmark_topic(args.thread_id, zenoh_prefix), serialized)
+                .res()
                 .map_err(|e| eyre::eyre!(e))?;
         }
     }

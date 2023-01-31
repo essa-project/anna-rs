@@ -20,7 +20,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use zenoh::prelude::ZFuture;
+use zenoh::prelude::sync::SyncResolve;
 
 #[derive(FromArgs)]
 /// Rusty anna client
@@ -86,7 +86,7 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
 
     let zenoh = Arc::new(
         zenoh::open(zenoh::config::Config::default())
-            .wait()
+            .res()
             .map_err(|e| eyre::eyre!(e))?,
     );
     let zenoh_prefix = anna_default_zenoh_prefix();
@@ -112,12 +112,12 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
     smol::block_on(client.init_tcp_connections())?;
 
     let mut commands = zenoh
-        .subscribe(&benchmark_topic(thread_id, zenoh_prefix))
-        .wait()
+        .declare_subscriber(&benchmark_topic(thread_id, zenoh_prefix))
+        .res()
         .map_err(|e| eyre::eyre!(e))
         .context("failed to declare subscriber for benchmark commands")?;
 
-    for message in commands.receiver().iter() {
+    for message in commands.receiver.iter() {
         let serialized = message.value.as_string()?;
         log::info!("Received benchmark command `{}`", serialized);
 
@@ -307,7 +307,7 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
                                 &MonitoringThread::feedback_report_topic(zenoh_prefix),
                                 serialized_latency.as_str(),
                             )
-                            .wait()
+                            .res()
                             .map_err(|e| eyre::eyre!(e))?;
 
                         count = 0;
@@ -340,7 +340,7 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
                         &MonitoringThread::feedback_report_topic(zenoh_prefix),
                         serialized_latency.as_str(),
                     )
-                    .wait()
+                    .res()
                     .map_err(|e| eyre::eyre!(e))?;
             }
             "WARM" => {

@@ -3,6 +3,7 @@ use crate::{
     topics::RoutingThread,
 };
 use eyre::Context;
+use zenoh::prelude::r#async::AsyncResolve;
 
 impl RoutingNode {
     /// Handles incoming replication change messages.
@@ -20,6 +21,7 @@ impl RoutingNode {
                             .replication_change_topic(&self.zenoh_prefix),
                         serialized,
                     )
+                    .res()
                     .await
                     .map_err(|e| eyre::eyre!(e))
                     .context("failed to forward replication change message to worker threads")?;
@@ -54,7 +56,8 @@ impl RoutingNode {
 
 #[cfg(test)]
 mod tests {
-    use zenoh::prelude::{Receiver, ZFuture};
+
+    use zenoh::prelude::sync::SyncResolve;
 
     use crate::{
         messages::{
@@ -71,8 +74,8 @@ mod tests {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
         let mut subscriber = zenoh
-            .subscribe(format!("{}/**", zenoh_prefix))
-            .wait()
+            .declare_subscriber(format!("{}/**", zenoh_prefix))
+            .res()
             .unwrap();
 
         let keys: Vec<_> = ["key0", "key1", "key2"]
@@ -118,12 +121,12 @@ mod tests {
         smol::block_on(router.replication_change_handler(&serialized)).unwrap();
 
         let message_1 = subscriber
-            .receiver()
+            .receiver
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
         assert_eq!(message_1.value.as_string().unwrap(), serialized.as_str());
         let message_2 = subscriber
-            .receiver()
+            .receiver
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
         assert_eq!(message_2.value.as_string().unwrap(), serialized.as_str());

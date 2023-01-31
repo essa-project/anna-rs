@@ -17,6 +17,7 @@ use std::{
     collections::{HashMap, HashSet},
     convert::TryFrom,
 };
+use zenoh::prelude::r#async::AsyncResolve;
 
 impl<'a> MonitoringNode<'a> {
     /// Queries statistics from all KVS threads.
@@ -79,6 +80,7 @@ impl<'a> MonitoringNode<'a> {
                 serde_json::to_string(&request).context("failed to serialize KeyRequest")?;
             self.zenoh
                 .put(&address, serialized_req)
+                .res()
                 .await
                 .map_err(|e| eyre::eyre!(e))?;
 

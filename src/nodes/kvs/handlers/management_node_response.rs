@@ -7,6 +7,7 @@ use eyre::Context;
 
 use rand::prelude::SliceRandom;
 use std::{collections::HashMap, mem, time::Instant};
+use zenoh::prelude::r#async::AsyncResolve;
 
 impl KvsNode {
     /// Handles incoming management node responses.
@@ -83,6 +84,7 @@ impl KvsNode {
                 serde_json::to_string(&request).context("failed to serialize KeyRequest")?;
             self.zenoh
                 .put(&address, serialized_req)
+                .res()
                 .await
                 .map_err(|e| eyre::eyre!(e))?;
         }
