@@ -81,7 +81,7 @@ impl std::convert::TryFrom<Key> for ClientKey {
 
 /// The default topic prefix for zenoh, used by the executables.
 pub fn anna_default_zenoh_prefix() -> &'static str {
-    "/anna"
+    "anna"
 }
 
 /// Helper trait for converting a [`zenoh::Value`] to string types.

@@ -3,7 +3,7 @@ use zenoh::prelude::{sync::SyncResolve, SplitBuffer};
 fn main() {
     let zenoh = zenoh::open(zenoh::config::Config::default()).res().unwrap();
 
-    let topic = std::env::args().skip(1).next().unwrap_or("/**".into());
+    let topic = std::env::args().skip(1).next().unwrap_or("**".into());
     let mut sub = zenoh.declare_subscriber(topic).res().unwrap();
 
     for sample in sub.receiver.iter() {
