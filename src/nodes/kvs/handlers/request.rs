@@ -1,7 +1,7 @@
 use crate::{
     messages::{response::ResponseTuple, Request, TcpMessage},
     nodes::{
-        kvs::{KvsNode, PendingRequest},
+        kvs::{KvsNode, MixKeyOperation, PendingRequest},
         send_tcp_message,
     },
     AnnaError, Key,
@@ -28,7 +28,18 @@ impl KvsNode {
 
         let timestamp = request.timestamp;
 
-        for tuple in request.inner_operations {
+        let iter = request
+            .client_operations
+            .into_iter()
+            .map(MixKeyOperation::Client)
+            .chain(
+                request
+                    .inner_operations
+                    .into_iter()
+                    .map(MixKeyOperation::Inner),
+            );
+
+        for tuple in iter {
             // first check if the thread is responsible for the key
             let key = tuple.key().clone();
 
@@ -42,6 +53,7 @@ impl KvsNode {
                             let tp = ResponseTuple {
                                 key: key.into(),
                                 lattice: None,
+                                raw_lattice: None,
                                 metadata: None,
                                 ty: tuple.response_ty(),
                                 error: Some(AnnaError::WrongThread),
@@ -71,18 +83,32 @@ impl KvsNode {
                     let mut tp = ResponseTuple {
                         key: key.clone(),
                         lattice: None,
+                        raw_lattice: None,
                         metadata: None,
                         ty: tuple.response_ty(),
                         error: None,
                         invalidate: false,
                     };
 
-                    match self.key_operation_handler(tuple, timestamp) {
-                        Ok((value, metadata)) => {
-                            tp.lattice = value;
-                            tp.metadata = metadata;
+                    match tuple {
+                        MixKeyOperation::Inner(operation) => {
+                            match self.inner_key_operation_handler(operation, timestamp) {
+                                Ok((raw_lattice, metadata)) => {
+                                    tp.raw_lattice = raw_lattice;
+                                    tp.metadata = metadata;
+                                }
+
+                                Err(err) => tp.error = Some(err),
+                            }
                         }
-                        Err(err) => tp.error = Some(err),
+                        MixKeyOperation::Client(operation) => {
+                            match self.key_operation_handler(operation, timestamp) {
+                                Ok(value) => {
+                                    tp.lattice = value;
+                                }
+                                Err(err) => tp.error = Some(err),
+                            }
+                        }
                     }
 
                     if let Key::Client(key) = &key {
@@ -165,7 +191,8 @@ mod tests {
         zenoh_prefix: &str,
     ) -> Request {
         Request {
-            inner_operations: vec![KeyOperation::Get(key.into())],
+            inner_operations: vec![],
+            client_operations: vec![KeyOperation::Get(key.into())],
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)
@@ -185,7 +212,8 @@ mod tests {
         zenoh_prefix: &str,
     ) -> Request {
         Request {
-            inner_operations: vec![KeyOperation::MapAdd(key, map)],
+            inner_operations: vec![],
+            client_operations: vec![KeyOperation::MapAdd(key, map)],
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)
@@ -205,7 +233,8 @@ mod tests {
         zenoh_prefix: &str,
     ) -> Request {
         Request {
-            inner_operations: vec![KeyOperation::SetAdd(key, set)],
+            inner_operations: vec![],
+            client_operations: vec![KeyOperation::SetAdd(key, set)],
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)
@@ -225,7 +254,8 @@ mod tests {
         zenoh_prefix: &str,
     ) -> Request {
         Request {
-            inner_operations: vec![KeyOperation::Put(key, lww_value)],
+            inner_operations: vec![],
+            client_operations: vec![KeyOperation::Put(key, lww_value)],
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)

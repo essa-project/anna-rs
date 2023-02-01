@@ -6,7 +6,11 @@ use crate::{
     config::Config,
     hash_ring::{tier_name, GlobalHashRing, HashRingUtil, KeyReplication, LocalHashRing},
     messages::{
-        self, cluster_membership::ClusterInfo, request::KeyOperation, Response, TcpMessage, Tier,
+        self,
+        cluster_membership::ClusterInfo,
+        request::{InnerKeyOperation, KeyOperation},
+        response::ResponseType,
+        Response, TcpMessage, Tier,
     },
     metadata::TierMetadata,
     store::{LatticeValue, LatticeValueStore},
@@ -738,8 +742,32 @@ pub struct ConfigData {
 }
 
 #[derive(Debug)]
+enum MixKeyOperation {
+    Inner(InnerKeyOperation),
+    Client(KeyOperation),
+}
+
+impl MixKeyOperation {
+    /// Returns the key that this operation reads/writes.
+    pub fn key(&self) -> Key {
+        match self {
+            MixKeyOperation::Inner(oper) => oper.key(),
+            MixKeyOperation::Client(oper) => oper.key(),
+        }
+    }
+
+    /// Returns the suitable [`ResponseType`] for the operation.
+    pub fn response_ty(&self) -> ResponseType {
+        match self {
+            MixKeyOperation::Inner(oper) => oper.response_ty(),
+            MixKeyOperation::Client(oper) => oper.response_ty(),
+        }
+    }
+}
+
+#[derive(Debug)]
 struct PendingRequest {
-    operation: KeyOperation,
+    operation: MixKeyOperation,
     addr: Option<String>,
     reply_stream: Option<TcpStream>,
     response_id: Option<String>,

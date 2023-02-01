@@ -6,6 +6,7 @@ use crate::{
         Response, TcpMessage,
     },
     metadata::MetadataKey,
+    nodes::kvs::MixKeyOperation,
     nodes::{kvs::KvsNode, send_tcp_message},
     AnnaError, ClientKey, Key, ALL_TIERS,
 };
@@ -97,19 +98,36 @@ impl KvsNode {
                             let mut tp = ResponseTuple {
                                 key: key.clone(),
                                 lattice: None,
+                                raw_lattice: None,
                                 metadata: None,
                                 ty: request.operation.response_ty(),
                                 error: None,
                                 invalidate: false,
                             };
 
-                            match self.key_operation_handler(request.operation, request.timestamp) {
-                                Ok((lattice, metadata)) => {
-                                    tp.lattice = lattice;
-                                    tp.metadata = metadata;
+                            match request.operation {
+                                MixKeyOperation::Inner(operation) => {
+                                    match self
+                                        .inner_key_operation_handler(operation, request.timestamp)
+                                    {
+                                        Ok((raw_lattice, metadata)) => {
+                                            tp.raw_lattice = raw_lattice;
+                                            tp.metadata = metadata;
+                                        }
+
+                                        Err(err) => tp.error = Some(err),
+                                    }
                                 }
-                                Err(error) => tp.error = Some(error),
+                                MixKeyOperation::Client(operation) => {
+                                    match self.key_operation_handler(operation, request.timestamp) {
+                                        Ok(value) => {
+                                            tp.lattice = value;
+                                        }
+                                        Err(err) => tp.error = Some(err),
+                                    }
+                                }
                             }
+
                             response.tuples.push(tp);
 
                             self.report_data.record_key_access(&key, now);
@@ -117,6 +135,7 @@ impl KvsNode {
                             let tp = ResponseTuple {
                                 key: key.clone(),
                                 lattice: None,
+                                raw_lattice: None,
                                 metadata: None,
                                 ty: request.operation.response_ty(),
                                 error: Some(AnnaError::WrongThread),
@@ -139,8 +158,16 @@ impl KvsNode {
                     } else if responsible {
                         // only put requests should fall into this category
                         if request.operation.response_ty() == ResponseType::Put {
-                            let _ =
-                                self.key_operation_handler(request.operation, request.timestamp);
+                            match request.operation {
+                                MixKeyOperation::Inner(operation) => {
+                                    let _ = self
+                                        .inner_key_operation_handler(operation, request.timestamp);
+                                }
+                                MixKeyOperation::Client(operation) => {
+                                    let _ =
+                                        self.key_operation_handler(operation, request.timestamp);
+                                }
+                            };
                             self.report_data.record_key_access(&key, now);
                         } else {
                             log::error!("Received a GET request with no response address.");

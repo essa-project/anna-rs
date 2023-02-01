@@ -3,7 +3,7 @@ use crate::{
     messages::{
         key_data::{KeyAccessData, KeyCount, KeySizeData},
         management::FuncNodesQuery,
-        request::KeyOperation,
+        request::InnerKeyOperation,
         user_feedback::ServerThreadStatistics,
         Request, Tier,
     },
@@ -172,7 +172,8 @@ impl ReportData {
         let serialized_stat =
             rmp_serde::to_vec_named(&stat).context("failed to serialize ServerThreadStatistics")?;
         let stat_req = Request {
-            inner_operations: vec![KeyOperation::PutMetadata(key.clone(), serialized_stat)],
+            inner_operations: vec![InnerKeyOperation::PutMetadata(key.clone(), serialized_stat)],
+            client_operations: vec![],
             response_address: Default::default(),
             request_id: Default::default(),
             address_cache_size: Default::default(),
@@ -216,7 +217,11 @@ impl ReportData {
         let serialized_access =
             rmp_serde::to_vec_named(&access).context("failed to serialize KeyAccessData")?;
         let access_req = Request {
-            inner_operations: vec![KeyOperation::PutMetadata(key.clone(), serialized_access)],
+            inner_operations: vec![InnerKeyOperation::PutMetadata(
+                key.clone(),
+                serialized_access,
+            )],
+            client_operations: vec![],
             response_address: Default::default(),
             request_id: Default::default(),
             address_cache_size: Default::default(),
@@ -243,7 +248,8 @@ impl ReportData {
         let serialized_size = rmp_serde::to_vec_named(&primary_key_size)
             .context("failed to serialize KeySizeData")?;
         let size_req = Request {
-            inner_operations: vec![KeyOperation::PutMetadata(key.clone(), serialized_size)],
+            inner_operations: vec![InnerKeyOperation::PutMetadata(key.clone(), serialized_size)],
+            client_operations: vec![],
             response_address: Default::default(),
             request_id: Default::default(),
             address_cache_size: Default::default(),

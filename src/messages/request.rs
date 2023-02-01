@@ -1,7 +1,7 @@
 //! Provides the main [`Request`] struct and related types.
 
 use super::response::{Response, ResponseType};
-use crate::{metadata::MetadataKey, ClientKey, Key};
+use crate::{metadata::MetadataKey, store::LatticeValue, ClientKey, Key};
 use std::collections::{HashMap, HashSet};
 
 /// An individual GET or PUT request; each request can batch multiple keys.
@@ -16,8 +16,12 @@ pub struct Request {
     /// The number of server addresses the client is aware of for a particular
     /// key; used for DHT membership change optimization.
     pub address_cache_size: HashMap<ClientKey, usize>,
-    /// The type and data of this request.
-    pub inner_operations: Vec<KeyOperation>,
+    /// The type and data of inner request.
+    #[serde(default)]
+    pub inner_operations: Vec<InnerKeyOperation>,
+    /// The type and data of client request.
+    #[serde(default)]
+    pub client_operations: Vec<KeyOperation>,
     /// The request creation time.
     pub timestamp: chrono::DateTime<chrono::Utc>,
 }
@@ -42,12 +46,8 @@ impl Request {
 pub enum KeyOperation {
     /// Get the value of a client key.
     Get(ClientKey),
-    /// Get the value of a metadata key.
-    GetMetadata(MetadataKey),
     /// Assign a new value to a client key.
     Put(ClientKey, Vec<u8>),
-    /// Assign a new value to a metadata key.
-    PutMetadata(MetadataKey, Vec<u8>),
     /// Merge a single-key causal lattice to a key.
     SetAdd(ClientKey, HashSet<Vec<u8>>),
     /// Add the value of one or more fields on a a single-key causal hashmap lattice.
@@ -61,9 +61,7 @@ impl KeyOperation {
     pub fn key(&self) -> Key {
         match self {
             KeyOperation::Get(key) => key.clone().into(),
-            KeyOperation::GetMetadata(key) => key.clone().into(),
             KeyOperation::Put(key, _) => key.clone().into(),
-            KeyOperation::PutMetadata(key, _) => key.clone().into(),
             KeyOperation::SetAdd(key, _) => key.clone().into(),
             KeyOperation::MapAdd(key, _) => key.clone().into(),
             KeyOperation::Inc(key, _) => key.clone().into(),
@@ -74,12 +72,45 @@ impl KeyOperation {
     pub fn response_ty(&self) -> ResponseType {
         match self {
             KeyOperation::Get(_) => ResponseType::Get,
-            KeyOperation::GetMetadata(_) => ResponseType::Get,
             KeyOperation::Put(..) => ResponseType::Put,
-            KeyOperation::PutMetadata(..) => ResponseType::Put,
             KeyOperation::SetAdd(..) => ResponseType::SetAdd,
             KeyOperation::MapAdd(..) => ResponseType::MapAdd,
             KeyOperation::Inc(..) => ResponseType::Inc,
+        }
+    }
+}
+
+/// Abstraction for a single key operation. Only used inside anna.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum InnerKeyOperation {
+    /// Get the value of a key.
+    Get(Key),
+    /// Get the value of a metadata key.
+    GetMetadata(MetadataKey),
+    /// Assign a new value to a key.
+    Put(Key, LatticeValue),
+    /// Assign a new value to a metadata key.
+    PutMetadata(MetadataKey, Vec<u8>),
+}
+
+impl InnerKeyOperation {
+    /// Returns the key that this operation reads/writes.
+    pub fn key(&self) -> Key {
+        match self {
+            InnerKeyOperation::Get(key) => key.clone(),
+            InnerKeyOperation::GetMetadata(key) => key.clone().into(),
+            InnerKeyOperation::Put(key, _) => key.clone(),
+            InnerKeyOperation::PutMetadata(key, _) => key.clone().into(),
+        }
+    }
+
+    /// Returns the suitable [`ResponseType`] for the operation.
+    pub fn response_ty(&self) -> ResponseType {
+        match self {
+            InnerKeyOperation::Get(_) => ResponseType::Get,
+            InnerKeyOperation::GetMetadata(_) => ResponseType::Get,
+            InnerKeyOperation::Put(..) => ResponseType::Put,
+            InnerKeyOperation::PutMetadata(..) => ResponseType::Put,
         }
     }
 }

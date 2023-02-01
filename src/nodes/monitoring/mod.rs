@@ -7,7 +7,7 @@ use crate::{
     messages::{
         management::AddNodes,
         replication_factor::{ReplicationFactor, ReplicationFactorUpdate, ReplicationValue},
-        request::KeyOperation,
+        request::InnerKeyOperation,
         Request, Response, SelfDepart, Tier,
     },
     metadata::{MetadataKey, TierMetadata},
@@ -361,7 +361,8 @@ impl<'a> MonitoringNode<'a> {
             if let hash_map::Entry::Vacant(entry) = addr_request_map.entry(target_address) {
                 let response_addr = self.mt.response_topic(&self.zenoh_prefix);
                 entry.insert(Request {
-                    inner_operations: vec![KeyOperation::GetMetadata(key.clone())],
+                    inner_operations: vec![InnerKeyOperation::GetMetadata(key.clone())],
+                    client_operations: vec![],
                     // NB: response_address might not be necessary here
                     // (or in other places where req_id is constructed either).
                     request_id: Some(format!("{}:{}", response_addr, self.request_id)),
@@ -394,7 +395,8 @@ impl<'a> MonitoringNode<'a> {
             if let hash_map::Entry::Vacant(entry) = addr_request_map.entry(target_address) {
                 let response_addr = self.mt.response_topic(&self.zenoh_prefix);
                 entry.insert(Request {
-                    inner_operations: vec![KeyOperation::PutMetadata(key.clone(), value)],
+                    inner_operations: vec![InnerKeyOperation::PutMetadata(key.clone(), value)],
+                    client_operations: vec![],
                     // NB: response_address might not be necessary here
                     // (or in other places where req_id is constructed either).
                     request_id: Some(format!("{}:{}", response_addr, self.request_id)),

@@ -17,7 +17,7 @@ pub struct Request {
     /// key; used for DHT membership change optimization.
     pub address_cache_size: HashMap<ClientKey, usize>,
     /// The type and data of this request.
-    pub inner_operations: Vec<KeyOperation>,
+    pub client_operations: Vec<KeyOperation>,
     /// The request creation time.
     pub timestamp: chrono::DateTime<chrono::Utc>,
 }

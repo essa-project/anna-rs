@@ -2,7 +2,7 @@
 
 use self::consistent_hash_map::{ConsistentHashMap, VirtualNode, VirtualThread};
 use crate::{
-    messages::{request::KeyOperation, Request, TcpMessage, Tier},
+    messages::{request::InnerKeyOperation, Request, TcpMessage, Tier},
     metadata::MetadataKey,
     nodes::send_tcp_message,
     topics::KvsThread,
@@ -194,7 +194,8 @@ impl HashRingUtil {
         let target_address = kvs_thread.request_topic(zenoh_prefix);
 
         let key_request = Request {
-            inner_operations: vec![KeyOperation::GetMetadata(replication_key)],
+            inner_operations: vec![InnerKeyOperation::GetMetadata(replication_key)],
+            client_operations: vec![],
             response_address: Some(response_address.to_string()),
             request_id: None,
             address_cache_size: Default::default(),

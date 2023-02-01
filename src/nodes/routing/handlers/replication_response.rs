@@ -201,6 +201,7 @@ mod tests {
         let mut tp = ResponseTuple {
             key: MetadataKey::Replication { key: key.clone() }.into(),
             lattice: None,
+            raw_lattice: None,
             metadata: None,
             ty: ResponseType::Put,
             error: None,

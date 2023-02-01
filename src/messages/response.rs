@@ -44,6 +44,8 @@ pub struct ResponseTuple {
     pub key: Key,
     /// The lattice value for this key, if this key is a [`ClientKey`][anna_api::ClientKey]
     pub lattice: Option<ClientResponseValue>,
+    /// The lattice value for this key, if this operation is a `[InnerKeyOperation]`[crate::message::request::InnerKeyOperation]
+    pub raw_lattice: Option<LatticeValue>,
     /// The metadata for this key, if this key is a [`MetadataKey`][crate::metadata::MetadataKey].
     pub(crate) metadata: Option<Vec<u8>>,
     /// The type of response being sent back to the client (see RequestType).

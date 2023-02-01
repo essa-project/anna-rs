@@ -951,7 +951,7 @@ fn generate_bad_response(req: &Request) -> Response {
         response_id: req.request_id.clone(),
         error: Err(AnnaError::Timeout),
         tuples: req
-            .inner_operations
+            .client_operations
             .iter()
             .map(|key_operation| {
                 ResponseTuple::new(
