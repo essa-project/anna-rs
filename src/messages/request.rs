@@ -21,7 +21,7 @@ pub struct Request {
     pub inner_operations: Vec<InnerKeyOperation>,
     /// The type and data of client request.
     #[serde(default)]
-    pub client_operations: Vec<KeyOperation>,
+    pub client_operations: Vec<ClientKeyOperation>,
     /// The request creation time.
     pub timestamp: chrono::DateTime<chrono::Utc>,
 }
@@ -43,7 +43,7 @@ impl Request {
 
 /// Abstraction for a single key operation.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum KeyOperation {
+pub enum ClientKeyOperation {
     /// Get the value of a client key.
     Get(ClientKey),
     /// Assign a new value to a client key.
@@ -56,26 +56,26 @@ pub enum KeyOperation {
     Inc(ClientKey, i64),
 }
 
-impl KeyOperation {
+impl ClientKeyOperation {
     /// Returns the key that this operation reads/writes.
     pub fn key(&self) -> Key {
         match self {
-            KeyOperation::Get(key) => key.clone().into(),
-            KeyOperation::Put(key, _) => key.clone().into(),
-            KeyOperation::SetAdd(key, _) => key.clone().into(),
-            KeyOperation::MapAdd(key, _) => key.clone().into(),
-            KeyOperation::Inc(key, _) => key.clone().into(),
+            ClientKeyOperation::Get(key) => key.clone().into(),
+            ClientKeyOperation::Put(key, _) => key.clone().into(),
+            ClientKeyOperation::SetAdd(key, _) => key.clone().into(),
+            ClientKeyOperation::MapAdd(key, _) => key.clone().into(),
+            ClientKeyOperation::Inc(key, _) => key.clone().into(),
         }
     }
 
     /// Returns the suitable [`ResponseType`] for the operation.
     pub fn response_ty(&self) -> ResponseType {
         match self {
-            KeyOperation::Get(_) => ResponseType::Get,
-            KeyOperation::Put(..) => ResponseType::Put,
-            KeyOperation::SetAdd(..) => ResponseType::SetAdd,
-            KeyOperation::MapAdd(..) => ResponseType::MapAdd,
-            KeyOperation::Inc(..) => ResponseType::Inc,
+            ClientKeyOperation::Get(_) => ResponseType::Get,
+            ClientKeyOperation::Put(..) => ResponseType::Put,
+            ClientKeyOperation::SetAdd(..) => ResponseType::SetAdd,
+            ClientKeyOperation::MapAdd(..) => ResponseType::MapAdd,
+            ClientKeyOperation::Inc(..) => ResponseType::Inc,
         }
     }
 }

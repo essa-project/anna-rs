@@ -5,7 +5,7 @@ use crate::{
         CounterLattice, LastWriterWinsLattice, Lattice, MapLattice, MaxLattice, SetLattice,
     },
     messages::{
-        request::{InnerKeyOperation, KeyOperation},
+        request::{ClientKeyOperation, InnerKeyOperation},
         response::ClientResponseValue,
     },
     store::LatticeValue,
@@ -17,20 +17,20 @@ use super::KvsNode;
 impl KvsNode {
     pub(crate) fn key_operation_handler(
         &mut self,
-        operation: KeyOperation,
+        operation: ClientKeyOperation,
         timestamp: chrono::DateTime<chrono::Utc>,
     ) -> Result<Option<ClientResponseValue>, AnnaError> {
         use std::collections::hash_map::Entry;
 
         match operation {
-            KeyOperation::Get(key) => {
+            ClientKeyOperation::Get(key) => {
                 if let Some(value) = self.kvs.get(&key.into()) {
                     Ok(Some(value.clone().into()))
                 } else {
                     Err(AnnaError::KeyDoesNotExist)
                 }
             }
-            KeyOperation::Put(key, value) => {
+            ClientKeyOperation::Put(key, value) => {
                 let key = Key::Client(key);
                 self.kvs.put(
                     key.clone(),
@@ -42,7 +42,7 @@ impl KvsNode {
                 self.local_changeset.insert(key);
                 Ok(None)
             }
-            KeyOperation::SetAdd(key, value) => {
+            ClientKeyOperation::SetAdd(key, value) => {
                 let key = Key::Client(key);
                 let value = SetLattice::new(value);
 
@@ -68,7 +68,7 @@ impl KvsNode {
                 self.local_changeset.insert(key);
                 Ok(None)
             }
-            KeyOperation::MapAdd(key, value) => {
+            ClientKeyOperation::MapAdd(key, value) => {
                 let key = Key::Client(key);
                 let value = MapLattice::new(
                     value
@@ -107,7 +107,7 @@ impl KvsNode {
                 self.local_changeset.insert(key);
                 Ok(None)
             }
-            KeyOperation::Inc(key, value) => {
+            ClientKeyOperation::Inc(key, value) => {
                 let key = Key::Client(key);
 
                 let value = match self.kvs.entry(key.clone()) {

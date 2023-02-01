@@ -3,7 +3,7 @@
 pub use self::interactive::run_interactive;
 use anna_api::{
     messages::{
-        request::KeyOperation,
+        request::ClientKeyOperation,
         response::{ClientResponseValue, ResponseTuple},
         AddressRequest, AddressResponse, Request, Response, TcpMessage,
     },
@@ -332,7 +332,7 @@ impl ClientNode {
     pub async fn put_lww_async(&mut self, key: ClientKey, bytes: Vec<u8>) -> eyre::Result<String> {
         let request_id = self.generate_request_id();
         let request = ClientRequest {
-            operation: KeyOperation::Put(key, bytes),
+            operation: ClientKeyOperation::Put(key, bytes),
             response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
             request_id: request_id.clone(),
             address_cache_size: HashMap::new(),
@@ -358,7 +358,7 @@ impl ClientNode {
     pub async fn inc_async(&mut self, key: ClientKey, value: i64) -> eyre::Result<String> {
         let request_id = self.generate_request_id();
         let request = ClientRequest {
-            operation: KeyOperation::Inc(key, value),
+            operation: ClientKeyOperation::Inc(key, value),
             response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
             request_id: request_id.clone(),
             address_cache_size: HashMap::new(),
@@ -388,7 +388,7 @@ impl ClientNode {
     ) -> eyre::Result<String> {
         let request_id = self.generate_request_id();
         let request = ClientRequest {
-            operation: KeyOperation::SetAdd(key, lattice),
+            operation: ClientKeyOperation::SetAdd(key, lattice),
             response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
             request_id: request_id.clone(),
             address_cache_size: HashMap::new(),
@@ -418,7 +418,7 @@ impl ClientNode {
     ) -> eyre::Result<String> {
         let request_id = self.generate_request_id();
         let request = ClientRequest {
-            operation: KeyOperation::MapAdd(key, lattice),
+            operation: ClientKeyOperation::MapAdd(key, lattice),
             response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
             request_id: request_id.clone(),
             address_cache_size: HashMap::new(),
@@ -444,7 +444,7 @@ impl ClientNode {
     pub async fn get_async(&mut self, key: ClientKey) -> eyre::Result<String> {
         let request_id = self.generate_request_id();
         let request = ClientRequest {
-            operation: KeyOperation::Get(key),
+            operation: ClientKeyOperation::Get(key),
             response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
             request_id: request_id.clone(),
             address_cache_size: HashMap::new(),

@@ -172,7 +172,7 @@ mod tests {
             last_writer_wins::Timestamp,
             LastWriterWinsLattice, Lattice, MaxLattice, OrderedSetLattice, SetLattice,
         },
-        messages::{request::KeyOperation, response::ClientResponseValue, Request, Response},
+        messages::{request::ClientKeyOperation, response::ClientResponseValue, Request, Response},
         nodes::kvs::kvs_test_instance,
         store::LatticeValue,
         topics::ClientThread,
@@ -192,7 +192,7 @@ mod tests {
     ) -> Request {
         Request {
             inner_operations: vec![],
-            client_operations: vec![KeyOperation::Get(key.into())],
+            client_operations: vec![ClientKeyOperation::Get(key.into())],
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)
@@ -213,7 +213,7 @@ mod tests {
     ) -> Request {
         Request {
             inner_operations: vec![],
-            client_operations: vec![KeyOperation::MapAdd(key, map)],
+            client_operations: vec![ClientKeyOperation::MapAdd(key, map)],
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)
@@ -234,7 +234,7 @@ mod tests {
     ) -> Request {
         Request {
             inner_operations: vec![],
-            client_operations: vec![KeyOperation::SetAdd(key, set)],
+            client_operations: vec![ClientKeyOperation::SetAdd(key, set)],
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)
@@ -255,7 +255,7 @@ mod tests {
     ) -> Request {
         Request {
             inner_operations: vec![],
-            client_operations: vec![KeyOperation::Put(key, lww_value)],
+            client_operations: vec![ClientKeyOperation::Put(key, lww_value)],
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)

@@ -1,5 +1,5 @@
 use anna_api::{
-    messages::{request::KeyOperation, Request},
+    messages::{request::ClientKeyOperation, Request},
     topics::KvsThread,
     ClientKey,
 };
@@ -14,7 +14,7 @@ pub struct PendingRequest {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClientRequest {
-    pub operation: KeyOperation,
+    pub operation: ClientKeyOperation,
     /// The topic at which the client is waiting for the server's response.
     pub response_address: String,
     /// A client-specific ID used to match asynchronous requests with responses.

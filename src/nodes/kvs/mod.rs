@@ -8,7 +8,7 @@ use crate::{
     messages::{
         self,
         cluster_membership::ClusterInfo,
-        request::{InnerKeyOperation, KeyOperation},
+        request::{ClientKeyOperation, InnerKeyOperation},
         response::ResponseType,
         Response, TcpMessage, Tier,
     },
@@ -744,7 +744,7 @@ pub struct ConfigData {
 #[derive(Debug)]
 enum MixKeyOperation {
     Inner(InnerKeyOperation),
-    Client(KeyOperation),
+    Client(ClientKeyOperation),
 }
 
 impl MixKeyOperation {
