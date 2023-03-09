@@ -1,14 +1,13 @@
 use crate::{
-    lattice::{last_writer_wins::Timestamp, LastWriterWinsLattice},
+    lattice::last_writer_wins::Timestamp,
     messages::{
         key_data::{KeyAccessData, KeyCount, KeySizeData},
         management::FuncNodesQuery,
-        request::{PutTuple, RequestData},
+        request::InnerKeyOperation,
         user_feedback::ServerThreadStatistics,
         Request, Tier,
     },
     metadata::{KvsMetadataKind, MetadataKey},
-    store::LatticeValue,
     topics::{KvsThread, ManagementThread},
     Key,
 };
@@ -114,6 +113,7 @@ impl ReportData {
         let access = self.create_access_report(node_tier, node, ts)?;
         let size = self.create_size_report(node_tier, node, ts, primary_key_size)?;
 
+        // self.management_id is always None at now.
         if let Some(management_id) = &self.management_id {
             zenoh
                 .put(
@@ -121,7 +121,7 @@ impl ReportData {
                         node_id: management_id.clone(),
                     }
                     .query_func_nodes_topic(zenoh_prefix),
-                    serde_json::to_string(&FuncNodesQuery {
+                    rmp_serde::to_vec_named(&FuncNodesQuery {
                         response_topic: wt.management_node_response_topic(zenoh_prefix).to_string(),
                     })?,
                 )
@@ -170,17 +170,14 @@ impl ReportData {
             access_count: self.access_count,
         };
         let serialized_stat =
-            serde_json::to_vec(&stat).context("failed to serialize ServerThreadStatistics")?;
+            rmp_serde::to_vec_named(&stat).context("failed to serialize ServerThreadStatistics")?;
         let stat_req = Request {
-            request: RequestData::Put {
-                tuples: vec![PutTuple {
-                    key: key.clone().into(),
-                    value: LatticeValue::Lww(LastWriterWinsLattice::from_pair(ts, serialized_stat)),
-                }],
-            },
+            inner_operations: vec![InnerKeyOperation::PutMetadata(key.clone(), serialized_stat)],
+            client_operations: vec![],
             response_address: Default::default(),
             request_id: Default::default(),
             address_cache_size: Default::default(),
+            timestamp: ts.0.clone(),
         };
         Ok(ReportMessage {
             key,
@@ -218,20 +215,17 @@ impl ReportData {
             kind: KvsMetadataKind::KeyAccess,
         };
         let serialized_access =
-            serde_json::to_vec(&access).context("failed to serialize KeyAccessData")?;
+            rmp_serde::to_vec_named(&access).context("failed to serialize KeyAccessData")?;
         let access_req = Request {
-            request: RequestData::Put {
-                tuples: vec![PutTuple {
-                    key: key.clone().into(),
-                    value: LatticeValue::Lww(LastWriterWinsLattice::from_pair(
-                        ts,
-                        serialized_access,
-                    )),
-                }],
-            },
+            inner_operations: vec![InnerKeyOperation::PutMetadata(
+                key.clone(),
+                serialized_access,
+            )],
+            client_operations: vec![],
             response_address: Default::default(),
             request_id: Default::default(),
             address_cache_size: Default::default(),
+            timestamp: ts.0.clone(),
         };
         Ok(ReportMessage {
             key,
@@ -251,18 +245,15 @@ impl ReportData {
             kvs_thread: node.clone(),
             kind: KvsMetadataKind::KeySize,
         };
-        let serialized_size =
-            serde_json::to_vec(&primary_key_size).context("failed to serialize KeySizeData")?;
+        let serialized_size = rmp_serde::to_vec_named(&primary_key_size)
+            .context("failed to serialize KeySizeData")?;
         let size_req = Request {
-            request: RequestData::Put {
-                tuples: vec![PutTuple {
-                    key: key.clone().into(),
-                    value: LatticeValue::Lww(LastWriterWinsLattice::from_pair(ts, serialized_size)),
-                }],
-            },
+            inner_operations: vec![InnerKeyOperation::PutMetadata(key.clone(), serialized_size)],
+            client_operations: vec![],
             response_address: Default::default(),
             request_id: Default::default(),
             address_cache_size: Default::default(),
+            timestamp: ts.0.clone(),
         };
         Ok(ReportMessage {
             key,

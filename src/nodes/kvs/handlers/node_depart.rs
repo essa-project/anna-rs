@@ -10,7 +10,7 @@ impl KvsNode {
         let work_start = Instant::now();
 
         let serialized =
-            serde_json::to_string(&message).context("failed to serialize Departed message")?;
+            rmp_serde::to_vec_named(&message).context("failed to serialize Departed message")?;
         let messages::Departed {
             tier,
             node_id: departing_node_id,
@@ -35,7 +35,7 @@ impl KvsNode {
                     .put(
                         &KvsThread::new(self.node_id.clone(), tid)
                             .node_depart_topic(&self.zenoh_prefix),
-                        serialized.as_str(),
+                        serialized.as_slice(),
                     )
                     .await
                     .map_err(|e| eyre::eyre!(e))?;
@@ -59,12 +59,12 @@ impl KvsNode {
 
 #[cfg(test)]
 mod tests {
-    use zenoh::prelude::{Receiver, ZFuture};
+    use zenoh::prelude::{Receiver, SplitBuffer, ZFuture};
 
     use crate::{
         messages::{self, Tier},
         nodes::kvs::kvs_test_instance,
-        zenoh_test_instance, ZenohValueAsString,
+        zenoh_test_instance,
     };
     use std::time::Duration;
 
@@ -106,7 +106,7 @@ mod tests {
             .recv_timeout(Duration::from_secs(5))
             .unwrap();
         let message_parsed: messages::Departed =
-            serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
         assert_eq!(message_parsed, departed);
 
         assert_eq!(server.global_hash_rings[&Tier::Memory].len(), 3000);

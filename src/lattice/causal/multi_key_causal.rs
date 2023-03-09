@@ -38,6 +38,10 @@ where
         &self.element
     }
 
+    fn reveal_mut(&mut self) -> &mut MultiKeyCausalPayload<T> {
+        &mut self.element
+    }
+
     fn into_revealed(self) -> MultiKeyCausalPayload<T> {
         self.element
     }

@@ -1,28 +1,23 @@
 //! Client proxy nodes that expose a GET/PUT-based interface to users.
 
 pub use self::interactive::run_interactive;
-use crate::{
-    lattice::{
-        causal::{MultiKeyCausalLattice, MultiKeyCausalPayload, VectorClock},
-        last_writer_wins::Timestamp,
-        LastWriterWinsLattice, Lattice, MapLattice, MaxLattice, SetLattice,
-    },
+use anna_api::{
     messages::{
-        request::RequestData, response::ResponseTuple, AddressRequest, AddressResponse, Request,
-        Response, TcpMessage,
+        request::ClientKeyOperation,
+        response::{ClientResponseValue, ResponseTuple},
+        AddressRequest, AddressResponse, Request, Response, TcpMessage,
     },
-    store::LatticeValue,
     topics::{ClientThread, KvsThread, RoutingThread},
-    AnnaError, ClientKey, Key, ZenohValueAsString,
+    AnnaError, ClientKey,
 };
 use client_request::{ClientRequest, PendingRequest};
 use eyre::{anyhow, bail, eyre, Context, ContextCompat};
 use futures::{
     stream::{self, FusedStream, FuturesUnordered},
-    Future, FutureExt, Stream, StreamExt, TryStreamExt,
+    AsyncReadExt, Future, FutureExt, Stream, StreamExt, TryStreamExt,
 };
 use rand::prelude::IteratorRandom;
-use smol::{channel, net::TcpStream};
+use smol::{channel, io::AsyncWriteExt, net::TcpStream};
 use std::{
     collections::{HashMap, HashSet},
     iter::Extend,
@@ -30,11 +25,76 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-
-use super::{receive_tcp_message, send_tcp_message};
+use zenoh::prelude::SplitBuffer;
 
 mod client_request;
 mod interactive;
+
+/// Receives a [`TcpMessage`] from the given stream.
+///
+/// This function requires that all messages are sent using [`send_tcp_message`],
+/// otherwise parsing the messages will fail.
+pub async fn receive_tcp_message(
+    stream: &mut (impl futures::AsyncRead + Unpin),
+) -> eyre::Result<Option<TcpMessage>> {
+    const MAX_MSG_LEN: u64 = u32::MAX as u64;
+
+    let mut len_raw = [0; 8];
+    if let Err(err) = stream.read_exact(&mut len_raw).await {
+        if err.kind() == std::io::ErrorKind::UnexpectedEof
+            || err.kind() == std::io::ErrorKind::ConnectionReset
+        {
+            return Ok(None);
+        } else {
+            return Err(eyre::Error::new(err).wrap_err("failed to read message length"));
+        }
+    }
+    let len = u64::from_le_bytes(len_raw);
+
+    if len > MAX_MSG_LEN {
+        bail!("Message is too long (length: {} bytes)", len);
+    }
+
+    let mut buf = vec![0; len.try_into().unwrap()];
+    if let Err(err) = stream.read_exact(&mut buf).await {
+        if err.kind() == std::io::ErrorKind::UnexpectedEof {
+            log::warn!("receive tcp message failed: {}", err);
+            return Ok(None);
+        } else {
+            return Err(eyre::Error::new(err).wrap_err("failed to read message"));
+        }
+    }
+    rmp_serde::from_slice(&buf)
+        .with_context(|| {
+            format!(
+                "failed to deserialize message: `{}`",
+                String::from_utf8_lossy(&buf)
+            )
+        })
+        .map(Some)
+}
+
+/// Sends the given message on the given tcp stream.
+///
+/// TCP messages should only be sent using this method, to ensure that all
+/// messages are sent in the same format.
+pub async fn send_tcp_message(
+    message: &TcpMessage,
+    connection: &mut TcpStream,
+) -> eyre::Result<()> {
+    let serialized =
+        rmp_serde::to_vec_named(&message).context("failed to serialize tcp message")?;
+    let len = (serialized.len() as u64).to_le_bytes();
+    connection
+        .write_all(&len)
+        .await
+        .context("failed to send message length")?;
+    connection
+        .write_all(&serialized)
+        .await
+        .context("failed to send message")?;
+    Ok(())
+}
 
 /// Client nodes interact with KVS nodes to serve user requests.
 ///
@@ -197,9 +257,10 @@ impl ClientNode {
                         }
                     }
                 };
-                let parsed: Option<smol::net::SocketAddr> =
-                    serde_json::from_str(&reply.as_string()?)
-                        .context("failed to deserialize tcp addr reply")?;
+
+                let reply_buf = reply.payload.contiguous();
+                let parsed: Option<smol::net::SocketAddr> = rmp_serde::from_slice(&reply_buf)
+                    .context("failed to deserialize tcp addr reply")?;
                 let connection = match parsed {
                     Some(addr) => {
                         let connection = TcpStream::connect(addr)
@@ -239,26 +300,6 @@ impl ClientNode {
         Ok(())
     }
 
-    /// Sets the given key to the given [`LatticeValue`].
-    ///
-    /// Awaits until the KVS acknowledges the operation before returning. This means that this
-    /// method only returns after the value was written to the KVS.
-    ///
-    /// To only send out the `PUT` request without waiting for acknowledgement use the
-    /// [`Self::put_async`] method.
-    ///
-    /// **Note:** This method drops all unknown responses, so be careful when using this method
-    /// together with the `*_async` methods.
-    pub async fn put(&mut self, key: ClientKey, value: LatticeValue) -> eyre::Result<()> {
-        let request_id = self
-            .put_async(key, value)
-            .await
-            .context("failed to send put")?;
-        self.wait_for_matching_response(request_id).await?;
-
-        Ok(())
-    }
-
     /// Returns the value stored for the given key.
     ///
     /// Awaits until the KVS sends the requested value.
@@ -268,7 +309,7 @@ impl ClientNode {
     ///
     /// **Note:** This method drops all unknown responses, so be careful when using this method
     /// together with the `*_async` methods.
-    pub async fn get(&mut self, key: ClientKey) -> eyre::Result<LatticeValue> {
+    pub async fn get(&mut self, key: ClientKey) -> eyre::Result<ClientResponseValue> {
         let request_id = self.get_async(key).await?;
         let tuple = self.wait_for_matching_response(request_id).await?;
 
@@ -277,7 +318,7 @@ impl ClientNode {
             .ok_or_else(|| anyhow!("response has no lattice value in tuple"))
     }
 
-    /// Starts a request to set the given key to the given [`LatticeValue`].
+    /// Starts a request to add the given [`Vec<u8>`] to the given key, that value is a [`LastWriteWinlattice<Vec<u8>>`][crate::lattice::LastWriterWinsLattice].
     ///
     /// Returns the ID of the request, which can be used to find the matching response.
     ///
@@ -288,15 +329,96 @@ impl ClientNode {
     /// Each `PUT` request is acknowledged by the KVS node with a [`Response`] message. To receive
     /// this response, the [`Self::wait_for_matching_response`] or [`Self::receive_async`]
     /// function can be used.
-    pub async fn put_async(
+    pub async fn put_lww_async(&mut self, key: ClientKey, bytes: Vec<u8>) -> eyre::Result<String> {
+        let request_id = self.generate_request_id();
+        let request = ClientRequest {
+            operation: ClientKeyOperation::Put(key, bytes),
+            response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
+            request_id: request_id.clone(),
+            address_cache_size: HashMap::new(),
+            timestamp: Instant::now(),
+        };
+
+        self.try_request(request).await?;
+
+        Ok(request_id)
+    }
+
+    /// Starts a request to increase the given [`i64`] to the given key, that value is a [`CounterLattice`][crate::lattice::CounterLattice].
+    ///
+    /// Returns the ID of the request, which can be used to find the matching response.
+    ///
+    /// The request might not be sent immediately. This happens when the client node does not
+    /// which KVS nodes are responsible for the key. In this case, it sends a [`AddressRequest`]
+    /// message to one of the configured routing nodes first.
+    ///
+    /// Each `PUT` request is acknowledged by the KVS node with a [`Response`] message. To receive
+    /// this response, the [`Self::wait_for_matching_response`] or [`Self::receive_async`]
+    /// function can be used.
+    pub async fn inc_async(&mut self, key: ClientKey, value: i64) -> eyre::Result<String> {
+        let request_id = self.generate_request_id();
+        let request = ClientRequest {
+            operation: ClientKeyOperation::Inc(key, value),
+            response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
+            request_id: request_id.clone(),
+            address_cache_size: HashMap::new(),
+            timestamp: Instant::now(),
+        };
+
+        self.try_request(request).await?;
+
+        Ok(request_id)
+    }
+
+    /// Starts a request to add the given [`HashSet<Vec<u8>>`] to the given key, that value is a Set.
+    ///
+    /// Returns the ID of the request, which can be used to find the matching response.
+    ///
+    /// The request might not be sent immediately. This happens when the client node does not
+    /// which KVS nodes are responsible for the key. In this case, it sends a [`AddressRequest`]
+    /// message to one of the configured routing nodes first.
+    ///
+    /// Each `PUT` request is acknowledged by the KVS node with a [`Response`] message. To receive
+    /// this response, the [`Self::wait_for_matching_response`] or [`Self::receive_async`]
+    /// function can be used.
+    pub async fn add_set_async(
         &mut self,
         key: ClientKey,
-        lattice: LatticeValue,
+        lattice: HashSet<Vec<u8>>,
     ) -> eyre::Result<String> {
         let request_id = self.generate_request_id();
         let request = ClientRequest {
-            key,
-            put_value: Some(lattice),
+            operation: ClientKeyOperation::SetAdd(key, lattice),
+            response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
+            request_id: request_id.clone(),
+            address_cache_size: HashMap::new(),
+            timestamp: Instant::now(),
+        };
+
+        self.try_request(request).await?;
+
+        Ok(request_id)
+    }
+
+    /// Starts a request to add the given `lattice` to the given key.
+    ///
+    /// Returns the ID of the request, which can be used to find the matching response.
+    ///
+    /// The request might not be sent immediately. This happens when the client node does not
+    /// which KVS nodes are responsible for the key. In this case, it sends a [`AddressRequest`]
+    /// message to one of the configured routing nodes first.
+    ///
+    /// Each `PUT` request is acknowledged by the KVS node with a [`Response`] message. To receive
+    /// this response, the [`Self::wait_for_matching_response`] or [`Self::receive_async`]
+    /// function can be used.
+    pub async fn add_map_async(
+        &mut self,
+        key: ClientKey,
+        lattice: HashMap<String, Vec<u8>>,
+    ) -> eyre::Result<String> {
+        let request_id = self.generate_request_id();
+        let request = ClientRequest {
+            operation: ClientKeyOperation::MapAdd(key, lattice),
             response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
             request_id: request_id.clone(),
             address_cache_size: HashMap::new(),
@@ -322,8 +444,7 @@ impl ClientNode {
     pub async fn get_async(&mut self, key: ClientKey) -> eyre::Result<String> {
         let request_id = self.generate_request_id();
         let request = ClientRequest {
-            key,
-            put_value: None,
+            operation: ClientKeyOperation::Get(key),
             response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
             request_id: request_id.clone(),
             address_cache_size: HashMap::new(),
@@ -346,6 +467,7 @@ impl ClientNode {
     pub async fn receive_async(&mut self) -> eyre::Result<Vec<Response>> {
         let mut results = Vec::new();
         let mut timeout = futures_timer::Delay::new(Duration::from_secs(3)).fuse();
+
         futures::select! {
             message = self.incoming_tcp_messages.select_next_some() => {
                 self.handle_tcp_message(message?, &mut results).await?;
@@ -354,16 +476,17 @@ impl ClientNode {
                 self.handle_tcp_message(message?, &mut results).await?;
             }
             sample = self.address_responses.select_next_some() => {
-                let serialized = sample.value.as_string()?;
-                let response: AddressResponse = serde_json::from_str(&serialized)
+                let serialized = sample.value.payload.contiguous();
+
+                let response: AddressResponse = rmp_serde::from_slice(&serialized)
                     .context("failed to deserialize KeyAddressResponse")?;
 
                 self.handle_address_response(response).await?;
             },
             sample = self.responses.select_next_some() => {
-                let serialized = sample.value.as_string()?;
+                let serialized = sample.value.payload.contiguous();
                 let response: Response =
-                    serde_json::from_str(&serialized).context("failed to deserialize KeyResponse")?;
+                    rmp_serde::from_slice(&serialized).context("failed to deserialize KeyResponse")?;
                 results.extend(self.handle_response(response).await?);
             },
             task_result = self.receive_tasks.select_next_some() => {
@@ -504,74 +627,68 @@ impl ClientNode {
 
     async fn get_lww(&mut self, key: ClientKey) -> eyre::Result<Vec<u8>> {
         let lattice = self.get(key).await?;
-        Ok(lattice.into_lww()?.into_revealed().into_value())
+        match lattice {
+            ClientResponseValue::Bytes(bytes) => Ok(bytes),
+            other => Err(anyhow!("expected a bytes, got `{:?}`", other)),
+        }
     }
 
     async fn put_lww(&mut self, key: ClientKey, value: Vec<u8>) -> eyre::Result<()> {
-        let lattice_val = LastWriterWinsLattice::from_pair(Timestamp::now(), value);
-
-        self.put(key, LatticeValue::Lww(lattice_val))
+        self.put_lww_async(key, value)
             .await
-            .context("put failed")?;
-
+            .context("failed to send put_lww")?;
         Ok(())
+    }
+
+    async fn inc(&mut self, key: ClientKey, value: i64) -> eyre::Result<i64> {
+        let request_id = self
+            .inc_async(key, value)
+            .await
+            .context("failed to send inc")?;
+        let tuple = self.wait_for_matching_response(request_id).await?;
+        let response = tuple
+            .lattice
+            .ok_or_else(|| anyhow!("response has no lattice value in tuple"))?;
+        match response {
+            ClientResponseValue::Int(n) => Ok(n),
+            other => Err(anyhow!("expected a int, got `{:?}`", other)),
+        }
     }
 
     async fn get_set(&mut self, key: ClientKey) -> eyre::Result<HashSet<Vec<u8>>> {
         let lattice = self.get(key).await?;
 
-        Ok(lattice.into_set()?.into_revealed())
+        match lattice {
+            ClientResponseValue::Set(set) => Ok(set),
+            other => Err(anyhow!("expected a set, got `{:?}`", other)),
+        }
     }
 
-    async fn put_set(&mut self, key: ClientKey, set: HashSet<Vec<u8>>) -> eyre::Result<()> {
-        let lattice_val = SetLattice::new(set);
-
-        self.put(key, LatticeValue::Set(lattice_val))
+    async fn add_set(&mut self, key: ClientKey, set: HashSet<Vec<u8>>) -> eyre::Result<()> {
+        let request_id = self
+            .add_set_async(key, set)
             .await
-            .context("put failed")?;
+            .context("failed to send add_set")?;
+        self.wait_for_matching_response(request_id).await?;
 
         Ok(())
     }
 
-    async fn get_causal(
-        &mut self,
-        key: ClientKey,
-    ) -> eyre::Result<MultiKeyCausalPayload<SetLattice<Vec<u8>>>> {
+    async fn get_map(&mut self, key: ClientKey) -> eyre::Result<HashMap<String, Vec<u8>>> {
         let lattice = self.get(key).await?;
 
-        Ok(lattice.into_multi_causal()?.into_revealed())
+        match lattice {
+            ClientResponseValue::Map(map) => Ok(map),
+            other => Err(anyhow!("expected a map, got `{:?}`", other)),
+        }
     }
 
-    // currently this mode is only for testing purpose
-    async fn put_causal(&mut self, key: ClientKey, value: Vec<u8>) -> eyre::Result<()> {
-        // construct a test client id - version pair
-        let vector_clock = {
-            let mut vector_clock = VectorClock::default();
-            vector_clock.insert("test".into(), MaxLattice::new(1));
-            vector_clock
-        };
-        // construct one test dependencies
-        let dependencies = {
-            let mut dependencies = MapLattice::default();
-            dependencies.insert("dep1".into(), {
-                let mut clock = VectorClock::default();
-                clock.insert("test1".into(), MaxLattice::new(1));
-                clock
-            });
-            dependencies
-        };
-        // populate the value
-        let value = {
-            let mut map = SetLattice::default();
-            map.insert(value);
-            map
-        };
-        let mkcp = MultiKeyCausalPayload::new(vector_clock, dependencies, value);
-        let mkcl = MultiKeyCausalLattice::new(mkcp);
-
-        self.put(key, LatticeValue::MultiCausal(mkcl))
+    async fn add_map(&mut self, key: ClientKey, map: HashMap<String, Vec<u8>>) -> eyre::Result<()> {
+        let request_id = self
+            .add_map_async(key, map)
             .await
-            .context("put failed")?;
+            .context("failed to send add_map")?;
+        self.wait_for_matching_response(request_id).await?;
 
         Ok(())
     }
@@ -642,23 +759,22 @@ impl ClientNode {
     }
 
     async fn try_request(&mut self, mut request: ClientRequest) -> eyre::Result<()> {
-        let key = &request.key;
-
+        let key = request.operation.key();
         // we only get NULL back for the worker thread if the query to the routing
         // tier timed out, which should never happen.
         let worker = match self
-            .get_worker_thread(key)
+            .get_worker_thread(&key)
             .await
             .context("failed to get worker thread")?
         {
             Some(worker) => worker.clone(),
             None => {
                 // this means a key addr request is issued asynchronously
-                if let Some((_, pending)) = self.pending_requests.get_mut(key) {
-                    pending.push(request);
+                if let Some((_, pending)) = self.pending_requests.get_mut(&key) {
+                    pending.push(request.clone());
                 } else {
                     self.pending_requests
-                        .insert(key.clone(), (Instant::now(), vec![request]));
+                        .insert(key.clone(), (Instant::now(), vec![request.clone()]));
                 }
 
                 return Ok(());
@@ -667,7 +783,7 @@ impl ClientNode {
 
         request
             .address_cache_size
-            .insert(key.clone(), self.key_address_cache[key].len());
+            .insert(key.clone(), self.key_address_cache[&key].len());
 
         self.send_request(&worker, &request.clone().into())
             .await
@@ -678,7 +794,7 @@ impl ClientNode {
             PendingRequest {
                 tp: Instant::now(),
                 node: worker,
-                request,
+                request: request.clone(),
             },
         );
 
@@ -725,7 +841,7 @@ impl ClientNode {
             self.zenoh
                 .put(
                     &target.request_topic(&self.zenoh_prefix),
-                    serde_json::to_string(request).context("failed to serialize Request")?,
+                    rmp_serde::to_vec_named(request).context("failed to serialize Request")?,
                 )
                 .await
                 .map_err(|e| eyre!(e))
@@ -761,8 +877,8 @@ impl ClientNode {
         if let Some(connection) = self.routing_thread_connections.get_mut(&rt_thread) {
             send_tcp_message(&TcpMessage::AddressRequest(request), connection).await?;
         } else {
-            let serialized =
-                serde_json::to_string(&request).context("failed to serialize KeyAddressRequest")?;
+            let serialized = rmp_serde::to_vec_named(&request)
+                .context("failed to serialize KeyAddressRequest")?;
             self.zenoh
                 .put(
                     &rt_thread.address_request_topic(&self.zenoh_prefix),
@@ -807,56 +923,46 @@ fn check_tuple(
     tuple: &ResponseTuple,
     key_address_cache: &mut HashMap<ClientKey, HashSet<KvsThread>>,
 ) -> bool {
-    if let Key::Client(key) = &tuple.key {
-        if let Some(AnnaError::WrongThread) = tuple.error {
-            log::info!(
-                "Server ordered invalidation of key address cache for key {}.
-          Retrying request.",
-                key
-            );
+    let key: ClientKey = tuple.key.clone().into();
+    if let Some(AnnaError::WrongThread) = tuple.error {
+        log::info!(
+            "Server ordered invalidation of key address cache for key {}.
+      Retrying request.",
+            key
+        );
 
-            key_address_cache.remove(key);
-            return true;
-        }
-
-        if tuple.invalidate {
-            key_address_cache.remove(key);
-
-            log::info!(
-                "Server ordered invalidation of key address cache for key {}",
-                key
-            );
-        }
+        key_address_cache.remove(&key);
+        return true;
     }
 
+    if tuple.invalidate {
+        key_address_cache.remove(&key);
+
+        log::info!(
+            "Server ordered invalidation of key address cache for key {}",
+            key
+        );
+    }
     false
 }
 
 fn generate_bad_response(req: &Request) -> Response {
     Response {
-        ty: req.request.ty(),
         response_id: req.request_id.clone(),
         error: Err(AnnaError::Timeout),
-        tuples: match req.request.clone() {
-            RequestData::Get { keys } => keys
-                .into_iter()
-                .map(|key| ResponseTuple {
-                    key,
-                    lattice: None,
-                    error: None,
-                    invalidate: false,
-                })
-                .collect(),
-            RequestData::Put { tuples } => tuples
-                .into_iter()
-                .map(|t| ResponseTuple {
-                    key: t.key,
-                    lattice: Some(t.value),
-                    error: None,
-                    invalidate: false,
-                })
-                .collect(),
-        },
+        tuples: req
+            .client_operations
+            .iter()
+            .map(|key_operation| {
+                ResponseTuple::new(
+                    key_operation.key().clone(),
+                    None,
+                    key_operation.response_ty(),
+                    None,
+                    false,
+                )
+            })
+            .collect(),
     }
 }
 

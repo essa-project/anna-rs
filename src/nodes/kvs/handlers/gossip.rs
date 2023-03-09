@@ -1,43 +1,25 @@
 use crate::{
-    messages::{request::RequestData, Request, Tier},
+    messages::gossip::GossipRequest,
     nodes::kvs::{KvsNode, PendingGossip},
 };
-use eyre::{bail, Context};
+use eyre::Context;
 use std::{collections::HashMap, time::Instant};
 
 impl KvsNode {
     /// Handles incoming gossip messages.
-    pub async fn gossip_handler(&mut self, serialized: &str) -> eyre::Result<()> {
+    pub async fn gossip_handler(&mut self, serialized: &[u8]) -> eyre::Result<()> {
         let work_start = Instant::now();
 
-        let gossip: Request =
-            serde_json::from_str(serialized).context("failed to decode key request")?;
+        let gossip: GossipRequest =
+            rmp_serde::from_slice(serialized).context("failed to decode key request")?;
         let mut gossip_map: HashMap<_, Vec<_>> = HashMap::new();
 
-        let tuples = match gossip.request {
-            RequestData::Put { tuples } => tuples,
-            RequestData::Get { .. } => {
-                bail!("received gossip request with request type Get")
-            }
-        };
+        let tuples = gossip.tuples;
 
         for tuple in tuples {
             // first check if the thread is responsible for the key
             let key = tuple.key.clone();
-            let threads = self
-                .hash_ring_util
-                .try_get_responsible_threads(
-                    self.wt.replication_response_topic(&self.zenoh_prefix),
-                    key.clone(),
-                    &self.global_hash_rings,
-                    &self.local_hash_rings,
-                    &self.key_replication_map,
-                    &[self.config_data.self_tier],
-                    &self.zenoh,
-                    &self.zenoh_prefix,
-                    &mut self.node_connections,
-                )
-                .await?;
+            let threads = self.try_get_responsible_threads(key.clone(), None).await?;
 
             if let Some(threads) = threads {
                 if threads.contains(&self.wt) {
@@ -56,17 +38,7 @@ impl KvsNode {
                             }
                         }
                         crate::Key::Client(key) => {
-                            self.hash_ring_util
-                                .issue_replication_factor_request(
-                                    self.wt.replication_response_topic(&self.zenoh_prefix),
-                                    key.clone(),
-                                    &self.global_hash_rings[&Tier::Memory],
-                                    &self.local_hash_rings[&Tier::Memory],
-                                    &self.zenoh,
-                                    &self.zenoh_prefix,
-                                    &mut self.node_connections,
-                                )
-                                .await?;
+                            self.issue_replication_factor_request(key.clone()).await?;
 
                             self.pending_gossip.entry(key.into()).or_default().push(
                                 PendingGossip {
@@ -87,20 +59,7 @@ impl KvsNode {
         }
 
         // redirect gossip
-        for (address, tuples) in gossip_map {
-            let key_request = Request {
-                request: RequestData::Put { tuples },
-                response_address: Default::default(),
-                request_id: Default::default(),
-                address_cache_size: Default::default(),
-            };
-            let serialized =
-                serde_json::to_string(&key_request).context("failed to serialize KeyRequest")?;
-            self.zenoh
-                .put(&address, serialized)
-                .await
-                .map_err(|e| eyre::eyre!(e))?;
-        }
+        self.redirect_gossip(gossip_map).await?;
 
         let time_elapsed = Instant::now() - work_start;
         self.report_data.record_working_time(time_elapsed, 4);
@@ -114,36 +73,21 @@ mod tests {
     use super::*;
     use crate::{
         lattice::{last_writer_wins::Timestamp, LastWriterWinsLattice, Lattice},
-        messages::request::PutTuple,
+        messages::gossip::GossipDataTuple,
         nodes::kvs::kvs_test_instance,
         store::LatticeValue,
-        topics::ClientThread,
         zenoh_test_instance, ClientKey,
     };
 
-    fn put_key_request(
-        key: ClientKey,
-        lattice_value: LatticeValue,
-        node_id: String,
-        zenoh_prefix: &str,
-    ) -> String {
-        let request = Request {
-            request: RequestData::Put {
-                tuples: vec![PutTuple {
-                    key: key.into(),
-                    value: lattice_value,
-                }],
-            },
-            response_address: Some(
-                ClientThread::new(node_id, 0)
-                    .response_topic(zenoh_prefix)
-                    .to_string(),
-            ),
-            request_id: Some("0".to_owned()),
-            address_cache_size: Default::default(),
+    fn gossip_request(key: ClientKey, lattice_value: LatticeValue) -> Vec<u8> {
+        let request = GossipRequest {
+            tuples: vec![GossipDataTuple {
+                key: key.into(),
+                value: lattice_value,
+            }],
         };
 
-        serde_json::to_string(&request).expect("failed to serialize KeyRequest")
+        rmp_serde::to_vec_named(&request).expect("failed to serialize KeyRequest")
     }
 
     #[test]
@@ -154,14 +98,12 @@ mod tests {
         let key: ClientKey = "key".into();
         let value = "value".as_bytes().to_owned();
 
-        let put_request = put_key_request(
+        let gossip_request = gossip_request(
             key.clone(),
             LatticeValue::Lww(LastWriterWinsLattice::from_pair(
                 Timestamp::now(),
                 value.clone(),
             )),
-            "simple_gossip_receive".to_string(),
-            &zenoh_prefix,
         );
 
         let mut server = kvs_test_instance(zenoh, zenoh_prefix);
@@ -169,7 +111,7 @@ mod tests {
 
         assert_eq!(server.local_changeset.len(), 0);
 
-        smol::block_on(server.gossip_handler(&put_request)).unwrap();
+        smol::block_on(server.gossip_handler(&gossip_request)).unwrap();
 
         assert_eq!(server.pending_gossip.len(), 0);
         let lattice = server.kvs.get(&key.into()).unwrap().as_lww().unwrap();
@@ -198,19 +140,17 @@ mod tests {
             .unwrap();
 
         value = "value2".as_bytes().to_owned();
-        let put_request = put_key_request(
+        let gossip_request = gossip_request(
             key.clone(),
             LatticeValue::Lww(LastWriterWinsLattice::from_pair(
                 Timestamp::now(),
                 value.clone(),
             )),
-            "gossip_update".to_string(),
-            &zenoh_prefix,
         );
 
         assert_eq!(server.local_changeset.len(), 0);
 
-        smol::block_on(server.gossip_handler(&put_request)).unwrap();
+        smol::block_on(server.gossip_handler(&gossip_request)).unwrap();
 
         assert_eq!(server.pending_gossip.len(), 0);
         let lattice = server.kvs.get(&key.into()).unwrap().as_lww().unwrap();

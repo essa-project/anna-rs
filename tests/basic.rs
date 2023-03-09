@@ -67,12 +67,12 @@ fn get_set() {
         GET b\n\
         PUT a 10 \n\
         GET a\n\
-        PUT_SET set 1 2 3 \n\
+        ADD_SET set 1 2 3 \n\
         GET_SET set\n\
-        PUT_SET set 1 2 4\n\
+        ADD_SET set 1 2 4\n\
         GET_SET set\n\
-        PUT_CAUSAL c hello\n\
-        GET_CAUSAL c\n\
+        INC counter 10\n\
+        INC counter -5\n\
     ";
     let mut stdin = input.as_bytes();
     let mut stdout = Cursor::new(Vec::new());
@@ -104,10 +104,8 @@ fn get_set() {
         kvs> { 1 2 3 }\n\
         kvs> Success!\n\
         kvs> { 1 2 3 4 }\n\
-        kvs> Success!\n\
-        kvs> {test : 1}\n\
-        dep1 : {test1 : 1}\n\
-        hello\n\
+        kvs> 10\n\
+        kvs> 5\n\
         kvs> "
             .lines()
             .collect::<Vec<_>>()

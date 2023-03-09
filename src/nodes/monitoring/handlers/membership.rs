@@ -10,10 +10,10 @@ use std::time::Instant;
 impl<'a> MonitoringNode<'a> {
     pub(in crate::nodes::monitoring) async fn membership_handler(
         &mut self,
-        serialized: &str,
+        serialized: &[u8],
     ) -> eyre::Result<()> {
         let parsed =
-            serde_json::from_str(serialized).context("failed to deserialize notify message")?;
+            rmp_serde::from_slice(serialized).context("failed to deserialize notify message")?;
 
         match parsed {
             messages::Notify::Join(join_message) => {

@@ -1,5 +1,4 @@
 use crate::{
-    lattice::Lattice,
     messages::{
         replication_factor::ReplicationFactor, AddressResponse, KeyAddress, Response, TcpMessage,
         Tier,
@@ -30,14 +29,12 @@ impl RoutingNode {
         match tuple.error {
             None => {
                 let lww_value = tuple
-                    .lattice
+                    .metadata
                     .as_ref()
-                    .ok_or_else(|| anyhow!("lattice was none in replication response"))?
-                    .as_lww()?;
+                    .ok_or_else(|| anyhow!("lattice was none in replication response"))?;
 
-                let rep_data: ReplicationFactor =
-                    serde_json::from_slice(lww_value.reveal().value().as_slice())
-                        .context("failed to deserialize ReplicationFactor")?;
+                let rep_data: ReplicationFactor = rmp_serde::from_slice(lww_value)
+                    .context("failed to deserialize ReplicationFactor")?;
 
                 for global in &rep_data.global {
                     self.key_replication_map
@@ -139,7 +136,7 @@ impl RoutingNode {
                         .await
                         .context("failed to send reply via TCP")?;
                 } else {
-                    let serialized = serde_json::to_string(&key_res)
+                    let serialized = rmp_serde::to_vec_named(&key_res)
                         .context("failed to serialize KeyAddressResponse")?;
                     self.zenoh
                         .put(&pending_key_req.reply_path.clone(), serialized)
@@ -171,7 +168,6 @@ impl RoutingNode {
 #[cfg(test)]
 mod tests {
     use crate::{
-        lattice::{last_writer_wins::Timestamp, LastWriterWinsLattice},
         messages::{
             replication_factor::{ReplicationFactor, ReplicationValue},
             response::{ResponseTuple, ResponseType},
@@ -179,7 +175,6 @@ mod tests {
         },
         metadata::MetadataKey,
         nodes::routing::router_test_instance,
-        store::LatticeValue,
         zenoh_test_instance, ClientKey, ALL_TIERS,
     };
 
@@ -199,7 +194,6 @@ mod tests {
         entry.local_replication.insert(Tier::Disk, 1);
 
         let mut response = Response {
-            ty: ResponseType::Put,
             tuples: Default::default(),
             response_id: Default::default(),
             error: Ok(()),
@@ -207,6 +201,9 @@ mod tests {
         let mut tp = ResponseTuple {
             key: MetadataKey::Replication { key: key.clone() }.into(),
             lattice: None,
+            raw_lattice: None,
+            metadata: None,
+            ty: ResponseType::Put,
             error: None,
             invalidate: false,
         };
@@ -225,12 +222,10 @@ mod tests {
             rf.local.push(rep_local);
         }
 
-        let repfactor = serde_json::to_vec(&rf).expect("failed to serialize ReplicationFactor");
+        let repfactor =
+            rmp_serde::to_vec_named(&rf).expect("failed to serialize ReplicationFactor");
 
-        tp.lattice = Some(LatticeValue::Lww(LastWriterWinsLattice::from_pair(
-            Timestamp::now(),
-            repfactor,
-        )));
+        tp.metadata = Some(repfactor);
         response.tuples.push(tp);
 
         smol::block_on(router.replication_response_handler(response)).unwrap();

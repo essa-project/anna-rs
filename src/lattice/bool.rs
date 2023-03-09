@@ -9,7 +9,7 @@ use super::Lattice;
 /// ## Example
 ///
 /// ```
-/// use anna_api::lattice::{BoolLattice, Lattice};
+/// use anna::lattice::{BoolLattice, Lattice};
 ///
 /// // initialize a new Lattice value with `false`
 /// let mut lattice = BoolLattice::new(false);
@@ -38,6 +38,10 @@ impl Lattice for BoolLattice {
 
     fn reveal(&self) -> &bool {
         &self.element
+    }
+
+    fn reveal_mut(&mut self) -> &mut bool {
+        &mut self.element
     }
 
     fn into_revealed(self) -> bool {

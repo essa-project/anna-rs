@@ -2,7 +2,10 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use crate::{store::LatticeValue, AnnaError, Key};
+// use crate::lattice::causal::MultiKeyCausalLattice;
+// use crate::lattice::SetLattice;
+// use crate::{store::LatticeValue, AnnaError, Key};
+use crate::{AnnaError, ClientKey};
 
 /// A response to a [`Request`][super::Request].
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -37,6 +40,20 @@ pub enum ResponseType {
     Inc,
 }
 
+#[derive(Debug, PartialEq, Eq, Hash, Clone, serde::Serialize, serde::Deserialize)]
+pub enum Key {
+    /// A key supplied by a [`ClientNode`][nodes::ClientNode].
+    Client(ClientKey),
+}
+
+impl Into<ClientKey> for Key {
+    fn into(self) -> ClientKey {
+        match self {
+            Key::Client(key) => key,
+        }
+    }
+}
+
 /// A protobuf to represent an individual key, both for requests and responses.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ResponseTuple {
@@ -44,10 +61,6 @@ pub struct ResponseTuple {
     pub key: Key,
     /// The lattice value for this key, if this key is a [`ClientKey`][anna_api::ClientKey]
     pub lattice: Option<ClientResponseValue>,
-    /// The lattice value for this key, if this operation is a `[InnerKeyOperation]`[crate::message::request::InnerKeyOperation]
-    pub raw_lattice: Option<LatticeValue>,
-    /// The metadata for this key, if this key is a [`MetadataKey`][crate::metadata::MetadataKey].
-    pub(crate) metadata: Option<Vec<u8>>,
     /// The type of response being sent back to the client (see RequestType).
     pub ty: ResponseType,
     /// The error type specified by the server (see AnnaError).
@@ -55,6 +68,24 @@ pub struct ResponseTuple {
     /// A boolean set by the server if the client's address_cache_size does not
     /// match the metadata stored by the server.
     pub invalidate: bool,
+}
+
+impl ResponseTuple {
+    pub fn new(
+        key: ClientKey,
+        lattice: Option<ClientResponseValue>,
+        ty: ResponseType,
+        error: Option<AnnaError>,
+        invalidate: bool,
+    ) -> Self {
+        ResponseTuple {
+            key: Key::Client(key),
+            lattice,
+            ty,
+            error,
+            invalidate,
+        }
+    }
 }
 
 /// Respond to the request that key is a [`ClientKey`][anna_api::ClientKey]
@@ -70,32 +101,4 @@ pub enum ClientResponseValue {
     OrderedSet(BTreeSet<Vec<u8>>),
     /// respond a set
     Set(HashSet<Vec<u8>>),
-}
-
-impl From<LatticeValue> for ClientResponseValue {
-    fn from(lattice: LatticeValue) -> Self {
-        use crate::lattice::Lattice;
-        match lattice {
-            LatticeValue::Lww(value) => ClientResponseValue::Bytes(value.reveal().value().clone()),
-            LatticeValue::Set(value) => ClientResponseValue::Set(value.reveal().clone()),
-            LatticeValue::OrderedSet(value) => {
-                ClientResponseValue::OrderedSet(value.reveal().clone())
-            }
-            LatticeValue::Counter(counter) => ClientResponseValue::Int(counter.total()),
-            LatticeValue::SingleCausal(set) => {
-                ClientResponseValue::Set(set.reveal().value.reveal().clone())
-            }
-            LatticeValue::SingleCausalMap(map) => {
-                let map = map.reveal().value.reveal();
-                let mut rmap = HashMap::with_capacity(map.len());
-                for (k, v) in map {
-                    rmap.insert(k.clone(), v.reveal().value().clone());
-                }
-                ClientResponseValue::Map(rmap)
-            }
-            LatticeValue::MultiCausal(mul_key_lattice) => {
-                ClientResponseValue::Set(mul_key_lattice.reveal().value.reveal().clone())
-            }
-        }
-    }
 }

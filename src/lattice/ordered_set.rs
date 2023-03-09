@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 /// ## Example
 ///
 /// ```
-/// use anna_api::lattice::{Lattice, OrderedSetLattice};
+/// use anna::lattice::{Lattice, OrderedSetLattice};
 /// use std::collections::BTreeSet;
 ///
 /// // initialize a new SetLattice with a few items
@@ -67,6 +67,10 @@ where
 
     fn reveal(&self) -> &BTreeSet<T> {
         &self.element
+    }
+
+    fn reveal_mut(&mut self) -> &mut BTreeSet<T> {
+        &mut self.element
     }
 
     fn into_revealed(self) -> BTreeSet<T> {

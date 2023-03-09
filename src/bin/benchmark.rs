@@ -1,13 +1,12 @@
 use anna::{
     anna_default_zenoh_prefix,
     config::Config,
-    lattice::{last_writer_wins::Timestamp, LastWriterWinsLattice},
     messages::user_feedback::{KeyLatency, UserFeedback},
     nodes::{client::ClientNode, request_cluster_info},
-    store::LatticeValue,
-    topics::{benchmark_topic, MonitoringThread, RoutingThread},
+    topics::{benchmark_topic, MonitoringThread},
     ClientKey, ZenohValueAsString,
 };
+use anna_api::topics::RoutingThread;
 use argh::FromArgs;
 use eyre::{anyhow, bail, Context};
 use std::{
@@ -222,24 +221,16 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
                             count += 1;
                         }
                         "P" => {
-                            let ts = Timestamp::now();
-                            let val = LastWriterWinsLattice::from_pair(
-                                ts,
-                                (0..len).map(|_| b'a').collect::<Vec<_>>(),
-                            );
-                            smol::block_on(client.put_async(key, LatticeValue::Lww(val)))?;
+                            let val = (0..len).map(|_| b'a').collect::<Vec<_>>();
+                            smol::block_on(client.put_lww_async(key, val))?;
                             receive(&mut client)?;
                             count += 1;
                         }
                         "M" => {
                             let req_start = Instant::now();
-                            let ts = Timestamp::now();
-                            let val = LastWriterWinsLattice::from_pair(
-                                ts,
-                                (0..len).map(|_| b'a').collect::<Vec<_>>(),
-                            );
+                            let val = (0..len).map(|_| b'a').collect::<Vec<_>>();
 
-                            smol::block_on(client.put_async(key.clone(), LatticeValue::Lww(val)))?;
+                            smol::block_on(client.put_lww_async(key.clone(), val))?;
                             receive(&mut client)?;
                             smol::block_on(client.get_async(key.clone()))?;
                             receive(&mut client)?;
@@ -299,13 +290,13 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
                             }
                         }
 
-                        let serialized_latency = serde_json::to_string(&feedback)
+                        let serialized_latency = rmp_serde::to_vec_named(&feedback)
                             .context("failed to serialize UserFeedback")?;
 
                         zenoh
                             .put(
                                 &MonitoringThread::feedback_report_topic(zenoh_prefix),
-                                serialized_latency.as_str(),
+                                serialized_latency.as_slice(),
                             )
                             .wait()
                             .map_err(|e| eyre::eyre!(e))?;
@@ -332,13 +323,13 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
                     key_latency: Default::default(),
                 };
 
-                let serialized_latency =
-                    serde_json::to_string(&feedback).context("failed to serialize UserFeedback")?;
+                let serialized_latency = rmp_serde::to_vec_named(&feedback)
+                    .context("failed to serialize UserFeedback")?;
 
                 zenoh
                     .put(
                         &MonitoringThread::feedback_report_topic(zenoh_prefix),
-                        serialized_latency.as_str(),
+                        serialized_latency.as_slice(),
                     )
                     .wait()
                     .map_err(|e| eyre::eyre!(e))?;
@@ -371,16 +362,9 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
                         log::info!("Creating key {}.", i);
                     }
 
-                    let ts = Timestamp::now();
-                    let val = LastWriterWinsLattice::from_pair(
-                        ts,
-                        (0..len).map(|_| b'a').collect::<Vec<_>>(),
-                    );
+                    let val = (0..len).map(|_| b'a').collect::<Vec<_>>();
 
-                    smol::block_on(
-                        client
-                            .put_async(generate_key(i.try_into().unwrap()), LatticeValue::Lww(val)),
-                    )?;
+                    smol::block_on(client.put_lww_async(generate_key(i.try_into().unwrap()), val))?;
                     receive(&mut client)?;
                 }
 

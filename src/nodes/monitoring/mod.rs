@@ -4,17 +4,15 @@ use self::stats::SummaryStats;
 use crate::{
     config::Config,
     hash_ring::{tier_name, GlobalHashRing, HashRingUtil, KeyReplication, LocalHashRing},
-    lattice::{last_writer_wins::Timestamp, LastWriterWinsLattice},
     messages::{
         management::AddNodes,
         replication_factor::{ReplicationFactor, ReplicationFactorUpdate, ReplicationValue},
-        request::{PutTuple, RequestData},
+        request::InnerKeyOperation,
         Request, Response, SelfDepart, Tier,
     },
     metadata::{MetadataKey, TierMetadata},
-    store::LatticeValue,
     topics::{KvsThread, ManagementThread, MonitoringThread, RoutingThread},
-    AnnaError, ClientKey, Key, ZenohValueAsString, ALL_TIERS,
+    AnnaError, ClientKey, Key, ALL_TIERS,
 };
 use eyre::{anyhow, bail, eyre, Context};
 use futures::StreamExt;
@@ -25,6 +23,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use zenoh::prelude::SplitBuffer;
 
 const MONITORING_PERIOD: Duration = Duration::from_secs(30);
 /// Defines the grace period for triggering actions to prevent over-correction.
@@ -277,15 +276,15 @@ impl<'a> MonitoringNode<'a> {
         loop {
             futures::select! {
                 sample = notify_stream.select_next_some() => {
-                    let serialized = sample.value.as_string()?;
+                    let serialized = sample.value.payload.contiguous();
                     self.membership_handler(&serialized).await.context("notify handler failed")?;
                 }
                 sample = depart_done_stream.select_next_some() => {
-                    let serialized = sample.value.as_string()?;
+                    let serialized = sample.value.payload.contiguous();
                     self.depart_done_handler(&serialized).await.context("depart done handler failed")?;
                 }
                 sample = feedback_stream.select_next_some() => {
-                    let serialized = sample.value.as_string()?;
+                    let serialized = sample.value.payload.contiguous();
                     self.feedback_handler(&serialized).await.context("feedback handler failed")?;
                 }
                 complete => break,
@@ -362,14 +361,14 @@ impl<'a> MonitoringNode<'a> {
             if let hash_map::Entry::Vacant(entry) = addr_request_map.entry(target_address) {
                 let response_addr = self.mt.response_topic(&self.zenoh_prefix);
                 entry.insert(Request {
-                    request: RequestData::Get {
-                        keys: vec![key.clone().into()],
-                    },
+                    inner_operations: vec![InnerKeyOperation::GetMetadata(key.clone())],
+                    client_operations: vec![],
                     // NB: response_address might not be necessary here
                     // (or in other places where req_id is constructed either).
                     request_id: Some(format!("{}:{}", response_addr, self.request_id)),
                     response_address: Some(response_addr.to_string()),
                     address_cache_size: Default::default(),
+                    timestamp: chrono::Utc::now(),
                 });
                 self.request_id += 1;
             }
@@ -396,20 +395,14 @@ impl<'a> MonitoringNode<'a> {
             if let hash_map::Entry::Vacant(entry) = addr_request_map.entry(target_address) {
                 let response_addr = self.mt.response_topic(&self.zenoh_prefix);
                 entry.insert(Request {
-                    request: RequestData::Put {
-                        tuples: vec![PutTuple {
-                            key: key.clone().into(),
-                            value: LatticeValue::Lww(LastWriterWinsLattice::from_pair(
-                                Timestamp::now(),
-                                value,
-                            )),
-                        }],
-                    },
+                    inner_operations: vec![InnerKeyOperation::PutMetadata(key.clone(), value)],
+                    client_operations: vec![],
                     // NB: response_address might not be necessary here
                     // (or in other places where req_id is constructed either).
                     request_id: Some(format!("{}:{}", response_addr, self.request_id)),
                     response_address: Some(response_addr.to_string()),
                     address_cache_size: Default::default(),
+                    timestamp: chrono::Utc::now(),
                 });
                 self.request_id += 1;
             }
@@ -424,7 +417,7 @@ impl<'a> MonitoringNode<'a> {
             .next()
             .await
             .ok_or_else(|| anyhow!("response stream closed unexpectedly"))?;
-        let response: Response = serde_json::from_str(&raw_response.value.as_string()?)?;
+        let response: Response = rmp_serde::from_slice(&raw_response.value.payload.contiguous())?;
 
         response.error?;
 
@@ -451,7 +444,7 @@ impl<'a> MonitoringNode<'a> {
             self.zenoh
                 .put(
                     &management_node.add_nodes_topic(&self.zenoh_prefix),
-                    serde_json::to_string(&AddNodes { tier, number })?,
+                    rmp_serde::to_vec_named(&AddNodes { tier, number })?,
                 )
                 .await
                 .map_err(|e| eyre::eyre!(e))?;
@@ -477,7 +470,7 @@ impl<'a> MonitoringNode<'a> {
         };
 
         self.zenoh
-            .put(&connection_addr, serde_json::to_string(&self_depart)?)
+            .put(&connection_addr, rmp_serde::to_vec_named(&self_depart)?)
             .await
             .map_err(|e| eyre::eyre!(e))?;
 
@@ -531,7 +524,7 @@ impl<'a> MonitoringNode<'a> {
 
             self.prepare_metadata_put_request(
                 &rep_key,
-                serde_json::to_vec(&rep_data)?,
+                rmp_serde::to_vec_named(&rep_data)?,
                 &mut addr_request_map,
             )?;
         }
@@ -541,7 +534,7 @@ impl<'a> MonitoringNode<'a> {
         let mut failed_keys = HashSet::new();
         for (address, request) in addr_request_map {
             let serialized_req =
-                serde_json::to_string(&request).context("failed to serialize KeyRequest")?;
+                rmp_serde::to_vec_named(&request).context("failed to serialize KeyRequest")?;
             self.zenoh
                 .put(&address, serialized_req)
                 .await
@@ -629,7 +622,7 @@ impl<'a> MonitoringNode<'a> {
 
         // send replication factor update to all relevant nodes
         for (addr, rep_factor) in replication_factor_map {
-            let serialized = serde_json::to_string(&rep_factor)?;
+            let serialized = rmp_serde::to_vec_named(&rep_factor)?;
             self.zenoh
                 .put(&addr, serialized)
                 .await

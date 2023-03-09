@@ -1,11 +1,12 @@
 use crate::{
-    messages::{request::KeyOperation, response::ResponseTuple, Request, TcpMessage, Tier},
+    messages::{response::ResponseTuple, Request, TcpMessage},
     nodes::{
-        kvs::{KvsNode, PendingRequest},
+        kvs::{KvsNode, MixKeyOperation, PendingRequest},
         send_tcp_message,
     },
     AnnaError, Key,
 };
+
 use eyre::Context;
 use smol::net::TcpStream;
 use std::time::Instant;
@@ -25,24 +26,24 @@ impl KvsNode {
 
         let response_id = request.request_id;
 
-        for tuple in request.request.into_tuples() {
+        let timestamp = request.timestamp;
+
+        let iter = request
+            .client_operations
+            .into_iter()
+            .map(MixKeyOperation::Client)
+            .chain(
+                request
+                    .inner_operations
+                    .into_iter()
+                    .map(MixKeyOperation::Inner),
+            );
+
+        for tuple in iter {
             // first check if the thread is responsible for the key
             let key = tuple.key().clone();
 
-            let threads = self
-                .hash_ring_util
-                .try_get_responsible_threads(
-                    self.wt.replication_response_topic(&self.zenoh_prefix),
-                    key.clone(),
-                    &self.global_hash_rings,
-                    &self.local_hash_rings,
-                    &self.key_replication_map,
-                    &[self.config_data.self_tier],
-                    &self.zenoh,
-                    &self.zenoh_prefix,
-                    &mut self.node_connections,
-                )
-                .await?;
+            let threads = self.try_get_responsible_threads(key.clone(), None).await?;
 
             if let Some(threads) = threads {
                 if !threads.contains(&self.wt) {
@@ -51,10 +52,10 @@ impl KvsNode {
                             // this means that this node is not responsible for this metadata key
                             let tp = ResponseTuple {
                                 key: key.into(),
-                                lattice: match tuple {
-                                    KeyOperation::Get(_) => None,
-                                    KeyOperation::Put(t) => Some(t.value),
-                                },
+                                lattice: None,
+                                raw_lattice: None,
+                                metadata: None,
+                                ty: tuple.response_ty(),
                                 error: Some(AnnaError::WrongThread),
                                 invalidate: Default::default(),
                             };
@@ -64,25 +65,15 @@ impl KvsNode {
                         Key::Client(key) => {
                             // if we don't know what threads are responsible, we issue a rep
                             // factor request and make the request pending
-                            self.hash_ring_util
-                                .issue_replication_factor_request(
-                                    self.wt.replication_response_topic(&self.zenoh_prefix),
-                                    key.clone(),
-                                    &self.global_hash_rings[&Tier::Memory],
-                                    &self.local_hash_rings[&Tier::Memory],
-                                    &self.zenoh,
-                                    &self.zenoh_prefix,
-                                    &mut self.node_connections,
-                                )
-                                .await?;
+                            self.issue_replication_factor_request(key.clone()).await?;
 
                             self.pending_requests.entry(key.into()).or_default().push(
                                 PendingRequest {
-                                    ty: tuple.response_ty(),
-                                    lattice: tuple.into_value(),
+                                    operation: tuple,
                                     addr: response_addr.clone(),
                                     response_id: response_id.clone(),
                                     reply_stream: reply_stream.clone(),
+                                    timestamp,
                                 },
                             );
                         }
@@ -92,25 +83,30 @@ impl KvsNode {
                     let mut tp = ResponseTuple {
                         key: key.clone(),
                         lattice: None,
+                        raw_lattice: None,
+                        metadata: None,
+                        ty: tuple.response_ty(),
                         error: None,
                         invalidate: false,
                     };
 
                     match tuple {
-                        KeyOperation::Get(key) => match self.kvs.get(&key) {
-                            Some(value) => {
-                                tp.lattice = Some(value.clone());
+                        MixKeyOperation::Inner(operation) => {
+                            match self.inner_key_operation_handler(operation, timestamp) {
+                                Ok((raw_lattice, metadata)) => {
+                                    tp.raw_lattice = raw_lattice;
+                                    tp.metadata = metadata;
+                                }
+
+                                Err(err) => tp.error = Some(err),
                             }
-                            None => {
-                                tp.error = Some(AnnaError::KeyDoesNotExist);
-                            }
-                        },
-                        KeyOperation::Put(tuple) => {
-                            if let Err(err) = self.kvs.put(tuple.key.clone(), tuple.value.clone()) {
-                                tp.error = Some(err);
-                            } else {
-                                self.local_changeset.insert(tuple.key);
-                                tp.lattice = Some(tuple.value);
+                        }
+                        MixKeyOperation::Client(operation) => {
+                            match self.key_operation_handler(operation, timestamp) {
+                                Ok(value) => {
+                                    tp.lattice = value;
+                                }
+                                Err(err) => tp.error = Some(err),
                             }
                         }
                     }
@@ -129,14 +125,14 @@ impl KvsNode {
                 }
             } else {
                 self.pending_requests
-                    .entry(key)
+                    .entry(key.clone())
                     .or_default()
                     .push(PendingRequest {
-                        ty: tuple.response_ty(),
-                        lattice: tuple.into_value(),
+                        operation: tuple,
                         addr: response_addr.clone(),
                         response_id: response_id.clone(),
                         reply_stream: reply_stream.clone(),
+                        timestamp,
                     });
             }
         }
@@ -151,7 +147,7 @@ impl KvsNode {
                         .await
                         .context("failed to send reply via TCP")?;
                 } else {
-                    let serialized_response = serde_json::to_string(&response)
+                    let serialized_response = rmp_serde::to_vec_named(&response)
                         .context("failed to serialize key response")?;
                     self.zenoh
                         .put(&response_addr, serialized_response)
@@ -167,7 +163,8 @@ impl KvsNode {
 
 #[cfg(test)]
 mod tests {
-    use zenoh::prelude::{Receiver, ZFuture};
+    use chrono::Utc;
+    use zenoh::prelude::{Receiver, SplitBuffer, ZFuture};
 
     use crate::{
         lattice::{
@@ -175,18 +172,15 @@ mod tests {
             last_writer_wins::Timestamp,
             LastWriterWinsLattice, Lattice, MaxLattice, OrderedSetLattice, SetLattice,
         },
-        messages::{
-            request::{PutTuple, RequestData},
-            Request, Response,
-        },
+        messages::{request::ClientKeyOperation, response::ClientResponseValue, Request, Response},
         nodes::kvs::kvs_test_instance,
         store::LatticeValue,
         topics::ClientThread,
-        zenoh_test_instance, ClientKey, ZenohValueAsString,
+        zenoh_test_instance, ClientKey,
     };
 
     use std::{
-        collections::{BTreeSet, HashSet},
+        collections::{BTreeSet, HashMap, HashSet},
         time::Duration,
     };
 
@@ -197,9 +191,8 @@ mod tests {
         zenoh_prefix: &str,
     ) -> Request {
         Request {
-            request: RequestData::Get {
-                keys: vec![key.into()],
-            },
+            inner_operations: vec![],
+            client_operations: vec![ClientKeyOperation::Get(key.into())],
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)
@@ -207,23 +200,20 @@ mod tests {
             ),
             request_id: Some(request_id),
             address_cache_size: Default::default(),
+            timestamp: chrono::Utc::now(),
         }
     }
 
-    fn put_key_request(
+    fn add_map_request(
         key: ClientKey,
-        lattice_value: LatticeValue,
+        map: HashMap<String, Vec<u8>>,
         node_id: String,
         request_id: String,
         zenoh_prefix: &str,
     ) -> Request {
         Request {
-            request: RequestData::Put {
-                tuples: vec![PutTuple {
-                    key: key.into(),
-                    value: lattice_value,
-                }],
-            },
+            inner_operations: vec![],
+            client_operations: vec![ClientKeyOperation::MapAdd(key, map)],
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)
@@ -231,6 +221,49 @@ mod tests {
             ),
             request_id: Some(request_id),
             address_cache_size: Default::default(),
+            timestamp: chrono::Utc::now(),
+        }
+    }
+
+    fn add_set_request(
+        key: ClientKey,
+        set: HashSet<Vec<u8>>,
+        node_id: String,
+        request_id: String,
+        zenoh_prefix: &str,
+    ) -> Request {
+        Request {
+            inner_operations: vec![],
+            client_operations: vec![ClientKeyOperation::SetAdd(key, set)],
+            response_address: Some(
+                ClientThread::new(node_id, 0)
+                    .response_topic(zenoh_prefix)
+                    .to_string(),
+            ),
+            request_id: Some(request_id),
+            address_cache_size: Default::default(),
+            timestamp: chrono::Utc::now(),
+        }
+    }
+
+    fn put_lww_request(
+        key: ClientKey,
+        lww_value: Vec<u8>,
+        node_id: String,
+        request_id: String,
+        zenoh_prefix: &str,
+    ) -> Request {
+        Request {
+            inner_operations: vec![],
+            client_operations: vec![ClientKeyOperation::Put(key, lww_value)],
+            response_address: Some(
+                ClientThread::new(node_id, 0)
+                    .response_topic(zenoh_prefix)
+                    .to_string(),
+            ),
+            request_id: Some(request_id),
+            address_cache_size: Default::default(),
+            timestamp: chrono::Utc::now(),
         }
     }
 
@@ -268,7 +301,8 @@ mod tests {
             .recv_timeout(Duration::from_secs(5))
             .unwrap();
 
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -276,7 +310,7 @@ mod tests {
         let rtp = &response.tuples[0];
 
         assert_eq!(rtp.key, key.clone().into());
-        assert_eq!(rtp.lattice.as_ref().unwrap(), &lattice);
+        assert_eq!(rtp.lattice.as_ref().unwrap(), &lattice.into());
         assert_eq!(rtp.error, None);
 
         assert_eq!(server.local_changeset.len(), 0);
@@ -324,7 +358,8 @@ mod tests {
             .recv_timeout(Duration::from_secs(5))
             .unwrap();
 
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -334,7 +369,7 @@ mod tests {
         assert_eq!(rtp.key, key.clone().into());
         assert_eq!(
             rtp.lattice.as_ref().unwrap(),
-            &LatticeValue::Set(set_lattice)
+            &ClientResponseValue::Set(set_lattice.reveal().clone())
         );
         assert_eq!(rtp.error, None);
 
@@ -387,7 +422,8 @@ mod tests {
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
 
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -396,8 +432,8 @@ mod tests {
 
         assert_eq!(rtp.key, key.clone().into());
         assert_eq!(
-            rtp.lattice.as_ref().unwrap().as_ordered_set().unwrap(),
-            &lattice
+            rtp.lattice.as_ref().unwrap(),
+            &ClientResponseValue::OrderedSet(lattice.reveal().clone())
         );
         assert_eq!(rtp.error, None);
 
@@ -455,7 +491,8 @@ mod tests {
             .receiver()
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -464,9 +501,9 @@ mod tests {
 
         assert_eq!(rtp.key, key.clone().into());
 
-        let left_value = rtp.lattice.as_ref().unwrap().as_single_causal().unwrap();
+        let left_value = rtp.lattice.as_ref().unwrap();
 
-        assert_eq!(left_value.reveal(), lattice.reveal());
+        assert_eq!(left_value, &LatticeValue::SingleCausal(lattice).into());
         assert_eq!(rtp.error, None);
 
         assert_eq!(server.local_changeset.len(), 0);
@@ -490,14 +527,15 @@ mod tests {
         server.key_replication_map.entry(key.clone()).or_default();
 
         let request_id = "user_put_and_get_lww_test_put_request_id";
-        let lattice_value = LastWriterWinsLattice::from_pair(Timestamp::now(), value);
-        let put_request = put_key_request(
+        let now = Utc::now();
+        let mut put_request = put_lww_request(
             key.clone(),
-            lattice_value.clone().into(),
+            value.clone(),
             server.node_id.clone(),
             request_id.to_owned(),
             &zenoh_prefix,
         );
+        put_request.timestamp = now;
 
         assert_eq!(server.local_changeset.len(), 0);
 
@@ -507,7 +545,8 @@ mod tests {
             .receiver()
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -535,7 +574,8 @@ mod tests {
             .receiver()
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -544,8 +584,8 @@ mod tests {
 
         assert_eq!(rtp.key, key.clone().into());
         assert_eq!(
-            rtp.lattice.as_ref().unwrap().as_lww().unwrap(),
-            &lattice_value
+            rtp.lattice.as_ref().unwrap(),
+            &ClientResponseValue::Bytes(value)
         );
         assert_eq!(rtp.error, None);
 
@@ -568,15 +608,14 @@ mod tests {
         s.insert("value1".as_bytes().to_owned());
         s.insert("value2".as_bytes().to_owned());
         s.insert("value3".as_bytes().to_owned());
-        let lattice = SetLattice::new(s.clone());
 
         let mut server = kvs_test_instance(zenoh.clone(), zenoh_prefix.clone());
         server.key_replication_map.entry(key.clone()).or_default();
 
         let request_id = "user_put_and_get_set_test_put_request_id";
-        let put_request = put_key_request(
+        let put_request = add_set_request(
             key.clone(),
-            LatticeValue::Set(lattice),
+            s.clone(),
             server.node_id.clone(),
             request_id.to_owned(),
             &zenoh_prefix,
@@ -590,7 +629,8 @@ mod tests {
             .receiver()
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -618,7 +658,8 @@ mod tests {
             .receiver()
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -626,7 +667,7 @@ mod tests {
         let rtp = &response.tuples[0];
 
         assert_eq!(rtp.key, key.clone().into());
-        assert_eq!(rtp.lattice.as_ref().unwrap().as_set().unwrap().reveal(), &s);
+        assert_eq!(rtp.lattice.as_ref().unwrap(), &ClientResponseValue::Set(s));
         assert_eq!(rtp.error, None);
 
         assert_eq!(server.local_changeset.len(), 1);
@@ -635,7 +676,7 @@ mod tests {
     }
 
     #[test]
-    fn user_put_and_get_ordered_set_test() {
+    fn user_put_and_get_hashmap_test() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
         let mut subscriber = zenoh
@@ -644,19 +685,18 @@ mod tests {
             .unwrap();
 
         let key: ClientKey = "key".into();
-        let mut s = BTreeSet::new();
-        s.insert("value2".as_bytes().to_owned());
-        s.insert("value1".as_bytes().to_owned());
-        s.insert("value3".as_bytes().to_owned());
-        let lattice = OrderedSetLattice::new(s.clone());
+        let mut map = HashMap::new();
+        map.insert("key1".to_string(), "value2".as_bytes().to_owned());
+        map.insert("key2".to_string(), "value1".as_bytes().to_owned());
+        map.insert("key3".to_string(), "value3".as_bytes().to_owned());
 
         let mut server = kvs_test_instance(zenoh.clone(), zenoh_prefix.clone());
         server.key_replication_map.entry(key.clone()).or_default();
 
         let request_id = "user_put_and_get_ordered_set_test_put_request_id";
-        let put_request = put_key_request(
+        let put_request = add_map_request(
             key.clone(),
-            LatticeValue::OrderedSet(lattice),
+            map.clone(),
             server.node_id.clone(),
             request_id.to_owned(),
             &zenoh_prefix,
@@ -670,7 +710,8 @@ mod tests {
             .receiver()
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -698,7 +739,8 @@ mod tests {
             .receiver()
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
+        let response: Response =
+            rmp_serde::from_slice(&message.value.payload.contiguous()).unwrap();
 
         assert_eq!(response.response_id.as_deref(), Some(request_id));
         assert_eq!(response.tuples.len(), 1);
@@ -707,103 +749,9 @@ mod tests {
 
         assert_eq!(rtp.key, key.clone().into());
         assert_eq!(
-            rtp.lattice
-                .as_ref()
-                .unwrap()
-                .as_ordered_set()
-                .unwrap()
-                .reveal(),
-            &s
+            rtp.lattice.as_ref().unwrap(),
+            &ClientResponseValue::Map(map)
         );
-        assert_eq!(rtp.error, None);
-
-        assert_eq!(server.local_changeset.len(), 1);
-        assert_eq!(server.report_data.access_count(), 2);
-        assert_eq!(server.report_data.key_access_count(&key.into()), 2);
-    }
-
-    #[test]
-    fn user_put_and_get_causal_test() {
-        let zenoh = zenoh_test_instance();
-        let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .subscribe(format!("{}/**", zenoh_prefix))
-            .wait()
-            .unwrap();
-
-        let key: ClientKey = "key".into();
-        let p = {
-            let mut vector_clock = VectorClock::default();
-            vector_clock.insert("1".into(), MaxLattice::new(1));
-            vector_clock.insert("2".into(), MaxLattice::new(1));
-            let mut value = SetLattice::default();
-            value.insert("value1".as_bytes().to_owned());
-            value.insert("value2".as_bytes().to_owned());
-            value.insert("value3".as_bytes().to_owned());
-            VectorClockValuePair::new(vector_clock, value)
-        };
-        let lattice = SingleKeyCausalLattice::new(p);
-
-        let mut server = kvs_test_instance(zenoh.clone(), zenoh_prefix.clone());
-        server.key_replication_map.entry(key.clone()).or_default();
-
-        let request_id = "user_put_and_get_causal_test_put_request_id";
-        let put_request = put_key_request(
-            key.clone(),
-            LatticeValue::SingleCausal(lattice.clone()),
-            server.node_id.clone(),
-            request_id.to_owned(),
-            &zenoh_prefix,
-        );
-
-        assert_eq!(server.local_changeset.len(), 0);
-
-        smol::block_on(server.request_handler(put_request, None)).unwrap();
-
-        let message = subscriber
-            .receiver()
-            .recv_timeout(Duration::from_secs(10))
-            .unwrap();
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
-
-        assert_eq!(response.response_id.as_deref(), Some(request_id));
-        assert_eq!(response.tuples.len(), 1);
-
-        let rtp = &response.tuples[0];
-
-        assert_eq!(rtp.key, key.clone().into());
-        assert_eq!(rtp.error, None);
-
-        assert_eq!(server.local_changeset.len(), 1);
-        assert_eq!(server.report_data.access_count(), 1);
-        assert_eq!(server.report_data.key_access_count(&key.clone().into()), 1);
-
-        let request_id = "user_put_and_get_causal_test_get_request_id";
-        let get_request = get_key_request(
-            key.clone(),
-            server.node_id.clone(),
-            request_id.to_owned(),
-            &zenoh_prefix,
-        );
-
-        smol::block_on(server.request_handler(get_request, None)).unwrap();
-
-        let message = subscriber
-            .receiver()
-            .recv_timeout(Duration::from_secs(10))
-            .unwrap();
-        let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
-
-        assert_eq!(response.response_id.as_deref(), Some(request_id));
-        assert_eq!(response.tuples.len(), 1);
-
-        let rtp = &response.tuples[0];
-
-        assert_eq!(rtp.key, key.clone().into());
-
-        let left_value = rtp.lattice.as_ref().unwrap().as_single_causal().unwrap();
-
-        assert_eq!(left_value.reveal(), lattice.reveal());
         assert_eq!(rtp.error, None);
 
         assert_eq!(server.local_changeset.len(), 1);

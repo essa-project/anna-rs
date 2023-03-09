@@ -4,12 +4,12 @@ pub use self::{client::ClientNode, kvs::KvsNode, routing::RoutingNode};
 use crate::{
     messages::{cluster_membership::ClusterInfo, TcpMessage},
     topics::RoutingThread,
-    ZenohValueAsString,
 };
 use eyre::{bail, Context};
 use futures::{AsyncReadExt, StreamExt};
 use smol::{io::AsyncWriteExt, net::TcpStream};
 use std::{convert::TryInto, time::Duration};
+use zenoh::prelude::SplitBuffer;
 
 pub mod client;
 pub mod kvs;
@@ -24,7 +24,8 @@ pub async fn send_tcp_message(
     message: &TcpMessage,
     connection: &mut TcpStream,
 ) -> eyre::Result<()> {
-    let serialized = serde_json::to_vec(&message).context("failed to serialize tcp message")?;
+    let serialized =
+        rmp_serde::to_vec_named(&message).context("failed to serialize tcp message")?;
     let len = (serialized.len() as u64).to_le_bytes();
     connection
         .write_all(&len)
@@ -71,7 +72,7 @@ pub async fn receive_tcp_message(
             return Err(eyre::Error::new(err).wrap_err("failed to read message"));
         }
     }
-    serde_json::from_slice(&buf)
+    rmp_serde::from_slice(&buf)
         .with_context(|| {
             format!(
                 "failed to deserialize message: `{}`",
@@ -105,7 +106,8 @@ pub async fn request_cluster_info(
             }
             [reply] => {
                 // add all the addresses that seed node sent
-                break serde_json::from_str(&reply.sample.value.as_string()?)
+                let replay = reply.sample.value.payload.contiguous();
+                break rmp_serde::from_slice(&replay)
                     .context("failed to deserialize ClusterMembership")?;
             }
             _ => bail!("multiple replies received from seed node"),

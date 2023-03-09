@@ -1,7 +1,9 @@
 use super::ClientNode;
-use crate::{config::Config, lattice::Lattice, nodes::request_cluster_info, topics::RoutingThread};
+use crate::{config::Config, nodes::request_cluster_info};
+use anna_api::topics::RoutingThread;
 use eyre::{anyhow, bail, Context};
 use std::{
+    collections::HashMap,
     io::{BufRead, BufReader, Read, Write},
     sync::Arc,
     time::Duration,
@@ -136,8 +138,8 @@ impl ClientNode {
         input: String,
         stdout: &mut dyn Write,
     ) -> eyre::Result<()> {
-        const HELP: &str = "\n\nValid commands are are GET, GET_SET, PUT, PUT_SET, \
-            PUT_CAUSAL, and GET_CAUSAL.";
+        const HELP: &str =
+            "\n\nValid commands are are GET, PUT, GET_SET, ADD_SET, GET_HASHMAP and ADD_HASHMAP.";
 
         let mut split = input.split_whitespace();
         let command = split
@@ -172,13 +174,44 @@ impl ClientNode {
                 log::trace!("[OK] Got {} from GET", string);
                 writeln!(stdout, "{}", string)?;
             }
-            "PUT_SET" | "put_set" => {
+            "INC" | "inc" => {
+                let key = split
+                    .next()
+                    .ok_or_else(|| anyhow!("missing key and value arguments"))?;
+                let value = split
+                    .next()
+                    .ok_or_else(|| anyhow!("missing value argument"))?;
+                if let Some(extra) = split.next() {
+                    bail!("unexpected argument `{}`", extra);
+                }
+
+                let i = smol::block_on(self.inc(key.into(), value.parse()?))?;
+                writeln!(stdout, "{}", i)?;
+            }
+            "ADD_SET" | "add_set" => {
                 let key = split
                     .next()
                     .ok_or_else(|| anyhow!("missing key and value arguments"))?;
                 let value = split.map(|s| s.to_owned().into_bytes()).collect();
 
-                smol::block_on(self.put_set(key.into(), value))?;
+                smol::block_on(self.add_set(key.into(), value))?;
+                writeln!(stdout, "Success!")?;
+            }
+            "ADD_HASHMAP" | "add_hashmap" => {
+                let key = split
+                    .next()
+                    .ok_or_else(|| anyhow!("missing key and value arguments"))?;
+                let value = split
+                    .filter_map(|s| {
+                        if let Some((field, value)) = s.split_once(":") {
+                            Some((field.to_string(), value.to_string().into_bytes()))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                smol::block_on(self.add_map(key.into(), value))?;
                 writeln!(stdout, "Success!")?;
             }
             "GET_SET" | "get_set" => {
@@ -202,21 +235,7 @@ impl ClientNode {
 
                 writeln!(stdout, "{{ {} }}", set.join(" "))?;
             }
-            "PUT_CAUSAL" | "put_causal" => {
-                let key = split
-                    .next()
-                    .ok_or_else(|| anyhow!("missing key and value arguments"))?;
-                let value = split
-                    .next()
-                    .ok_or_else(|| anyhow!("missing value argument"))?;
-                if let Some(extra) = split.next() {
-                    bail!("unexpected argument `{}`", extra);
-                }
-
-                smol::block_on(self.put_causal(key.into(), value.to_owned().into_bytes()))?;
-                writeln!(stdout, "Success!")?;
-            }
-            "GET_CAUSAL" | "get_causal" => {
+            "GET_HASHMAP" | "get_hashmap" => {
                 let key = split
                     .next()
                     .ok_or_else(|| anyhow!("missing key argument"))?;
@@ -224,29 +243,17 @@ impl ClientNode {
                     bail!("unexpected argument `{}`", extra);
                 }
 
-                let mkcl = smol::block_on(self.get_causal(key.into()))?;
+                let value = smol::block_on(self.get_map(key.into()))?;
 
-                for (k, v) in mkcl.vector_clock.reveal() {
-                    writeln!(stdout, "{{{} : {}}}", k, v.reveal())?;
-                }
-
-                for (k, v) in mkcl.dependencies.reveal() {
-                    write!(stdout, "{} : ", k)?;
-                    for vc_pair in v.reveal() {
-                        writeln!(stdout, "{{{} : {}}}", vc_pair.0, vc_pair.1.reveal())?;
-                    }
-                }
-
-                let values = mkcl
-                    .value
-                    .reveal()
+                let map: HashMap<String, String> = value
                     .iter()
-                    .map(|v| String::from_utf8(v.to_owned()))
-                    .collect::<Result<Vec<_>, _>>()?;
+                    .map(|(k, v)| std::str::from_utf8(v).map(|v| (k.to_string(), v.to_string())))
+                    .collect::<Result<_, _>>()
+                    .context("received value is not valid utf8")?;
 
-                assert_eq!(values.len(), 1);
+                log::trace!("[OK] Got {:?} from GET_HASHMAP", map);
 
-                writeln!(stdout, "{}", values[0])?;
+                writeln!(stdout, "{:#?}", map)?;
             }
             other => bail!("unrecognized command `{}`.{}", other, HELP),
         }

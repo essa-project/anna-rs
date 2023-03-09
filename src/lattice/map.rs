@@ -9,7 +9,7 @@ use std::{borrow::Borrow, collections::HashMap, hash::Hash};
 /// ## Example
 ///
 /// ```
-/// use anna_api::lattice::{Lattice, MapLattice, MaxLattice};
+/// use anna::lattice::{Lattice, MapLattice, MaxLattice};
 /// use std::collections::{HashMap, HashSet};
 ///
 /// // initialize a new `HashMap` with value type `MaxLattice`
@@ -61,6 +61,10 @@ where
 
     fn reveal(&self) -> &HashMap<K, V> {
         &self.element
+    }
+
+    fn reveal_mut(&mut self) -> &mut HashMap<K, V> {
+        &mut self.element
     }
 
     fn into_revealed(self) -> HashMap<K, V> {

@@ -35,7 +35,7 @@ impl RoutingNode {
                     // gossip the new node address between server nodes to ensure
                     // consistency
                     for hash_ring in self.global_hash_rings.values() {
-                        let msg = serde_json::to_string(&join_message)
+                        let msg = rmp_serde::to_vec_named(&join_message)
                             .context("failed to serialize join message")?;
 
                         for node_id in hash_ring.unique_nodes() {
@@ -46,7 +46,7 @@ impl RoutingNode {
                                     .put(
                                         &KvsThread::new(node_id.clone(), 0)
                                             .node_join_topic(&self.zenoh_prefix),
-                                        msg.as_str(),
+                                        msg.as_slice(),
                                     )
                                     .await
                                     .map_err(|e| eyre::eyre!(e))
@@ -56,14 +56,14 @@ impl RoutingNode {
                     }
 
                     // tell all worker threads about the message
-                    let serialized = serde_json::to_string(&message)
+                    let serialized = rmp_serde::to_vec_named(&message)
                         .context("failed to serialize Notify message")?;
                     for tid in 1..self.config_data.routing_thread_count {
                         self.zenoh
                             .put(
                                 &RoutingThread::new(self.node_id.clone(), tid)
                                     .notify_topic(&self.zenoh_prefix),
-                                serialized.as_str(),
+                                serialized.as_slice(),
                             )
                             .await
                             .map_err(|e| eyre::eyre!(e))
@@ -100,14 +100,14 @@ impl RoutingNode {
 
                 if self.thread_id == 0 {
                     // tell all worker threads about the message
-                    let serialized = serde_json::to_string(&message)
+                    let serialized = rmp_serde::to_vec_named(&message)
                         .context("failed to serialize Notify message")?;
                     for tid in 1..self.config_data.routing_thread_count {
                         self.zenoh
                             .put(
                                 &RoutingThread::new(self.node_id.clone(), tid)
                                     .notify_topic(&self.zenoh_prefix),
-                                serialized.as_str(),
+                                serialized.as_slice(),
                             )
                             .await
                             .map_err(|e| eyre::eyre!(e))
@@ -134,12 +134,12 @@ impl RoutingNode {
 
 #[cfg(test)]
 mod tests {
-    use zenoh::prelude::{Receiver, ZFuture};
+    use zenoh::prelude::{Receiver, SplitBuffer, ZFuture};
 
     use crate::{
         messages::{self, Tier},
         nodes::routing::router_test_instance,
-        zenoh_test_instance, ZenohValueAsString,
+        zenoh_test_instance,
     };
     use std::time::Duration;
 
@@ -173,7 +173,7 @@ mod tests {
                 .receiver()
                 .recv_timeout(Duration::from_secs(10))
                 .unwrap();
-            serde_json::from_str(&sample.value.as_string().unwrap()).unwrap()
+            rmp_serde::from_slice(&sample.value.payload.contiguous()).unwrap()
         };
 
         assert_eq!(message, join_message);

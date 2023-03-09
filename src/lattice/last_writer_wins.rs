@@ -11,7 +11,7 @@ use super::Lattice;
 /// ## Example
 ///
 /// ```
-/// use anna_api::lattice::{
+/// use anna::lattice::{
 ///     Lattice, LastWriterWinsLattice,
 ///     last_writer_wins::{Timestamp, TimestampValuePair},
 /// };
@@ -71,6 +71,10 @@ where
 
     fn reveal(&self) -> &TimestampValuePair<T> {
         &self.element
+    }
+
+    fn reveal_mut(&mut self) -> &mut TimestampValuePair<T> {
+        &mut self.element
     }
 
     fn into_revealed(self) -> TimestampValuePair<T> {
@@ -134,7 +138,7 @@ impl<T> TimestampValuePair<T> {
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
-pub struct Timestamp(chrono::DateTime<chrono::Utc>);
+pub struct Timestamp(pub(crate) chrono::DateTime<chrono::Utc>);
 
 impl Timestamp {
     /// Returns an UTC timestamp corresponding to the current date and time.

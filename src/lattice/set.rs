@@ -7,7 +7,7 @@ use std::{collections::HashSet, hash::Hash};
 /// ## Example
 ///
 /// ```
-/// use anna_api::lattice::{Lattice, SetLattice};
+/// use anna::lattice::{Lattice, SetLattice};
 /// use std::collections::HashSet;
 ///
 /// // initialize a new SetLattice with a few items
@@ -58,6 +58,10 @@ where
 
     fn reveal(&self) -> &HashSet<T> {
         &self.element
+    }
+
+    fn reveal_mut(&mut self) -> &mut HashSet<T> {
+        &mut self.element
     }
 
     fn into_revealed(self) -> HashSet<T> {

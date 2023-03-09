@@ -1,18 +1,15 @@
-use crate::{
-    lattice::Lattice, messages::Response, metadata::MetadataKey, nodes::kvs::KvsNode, ClientKey,
-    Key,
-};
+use crate::{messages::Response, metadata::MetadataKey, nodes::kvs::KvsNode, ClientKey, Key};
 use eyre::{anyhow, bail, Context};
 use std::{collections::HashSet, time::Instant};
 
 impl KvsNode {
     /// Handles incoming cache_ip messages.
-    pub async fn cache_ip_handler(&mut self, serialized: &str) -> eyre::Result<()> {
+    pub async fn cache_ip_handler(&mut self, serialized: &[u8]) -> eyre::Result<()> {
         let work_start = Instant::now();
 
         // The response will be a list of cache IPs and their responsible keys.
         let response: Response =
-            serde_json::from_str(serialized).context("failed to deserialize KeyResponse")?;
+            rmp_serde::from_slice(serialized).context("failed to deserialize KeyResponse")?;
 
         for tuple in response.tuples {
             // tuple is a key-value pair from the KVS;
@@ -28,14 +25,11 @@ impl KvsNode {
 
                 // Extract the keys that the cache is responsible for.
                 let lww_value = tuple
-                    .lattice
-                    .as_ref()
-                    .ok_or_else(|| anyhow!("lattice not set on cache ip tuple"))?
-                    .as_lww()?;
+                    .metadata
+                    .ok_or_else(|| anyhow!("lattice not set on cache ip tuple"))?;
 
-                let key_set: HashSet<ClientKey> =
-                    serde_json::from_slice(lww_value.reveal().value().as_slice())
-                        .context("failed to deserialize StringSet")?;
+                let key_set: HashSet<ClientKey> = rmp_serde::from_slice(lww_value.as_slice())
+                    .context("failed to deserialize StringSet")?;
 
                 // First, update key_to_cache_ips with dropped keys for this cache.
 

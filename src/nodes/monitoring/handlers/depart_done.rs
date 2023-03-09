@@ -9,10 +9,10 @@ use std::time::Instant;
 impl<'a> MonitoringNode<'a> {
     pub(in crate::nodes::monitoring) async fn depart_done_handler(
         &mut self,
-        serialized: &str,
+        serialized: &[u8],
     ) -> eyre::Result<()> {
         let departed: Departed =
-            serde_json::from_str(serialized).context("failed to deserialize Depart message")?;
+            rmp_serde::from_slice(serialized).context("failed to deserialize Depart message")?;
 
         let entry = self
             .departing_node_map
@@ -47,7 +47,7 @@ impl<'a> MonitoringNode<'a> {
                 self.zenoh
                     .put(
                         &management_node.remove_node_topic(&self.zenoh_prefix),
-                        serde_json::to_string(&RemoveNode {
+                        rmp_serde::to_vec_named(&RemoveNode {
                             departed_node_id: departed.node_id,
                         })?,
                     )

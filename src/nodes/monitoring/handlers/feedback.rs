@@ -7,10 +7,10 @@ use eyre::Context;
 impl<'a> MonitoringNode<'a> {
     pub(in crate::nodes::monitoring) async fn feedback_handler(
         &mut self,
-        serialized: &str,
+        serialized: &[u8],
     ) -> eyre::Result<()> {
         let fb: UserFeedback =
-            serde_json::from_str(serialized).context("failed to deserialize notify message")?;
+            rmp_serde::from_slice(serialized).context("failed to deserialize notify message")?;
 
         if fb.finish {
             self.user_latency.remove(&fb.uid);

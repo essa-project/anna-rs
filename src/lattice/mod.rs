@@ -18,14 +18,15 @@
 //! example, the [`causal`] submodule contains lattice types to achieve causal consistency.
 
 pub use self::{
-    bool::BoolLattice, last_writer_wins::LastWriterWinsLattice, map::MapLattice, max::MaxLattice,
-    ordered_set::OrderedSetLattice, set::SetLattice,
+    bool::BoolLattice, counter::CounterLattice, last_writer_wins::LastWriterWinsLattice,
+    map::MapLattice, max::MaxLattice, ordered_set::OrderedSetLattice, set::SetLattice,
 };
 
 pub mod causal;
 pub mod last_writer_wins;
 
 mod bool;
+mod counter;
 mod map;
 mod max;
 mod ordered_set;
@@ -58,6 +59,9 @@ pub trait Lattice {
 
     /// Returns the current value stored in the lattice.
     fn reveal(&self) -> &Self::Element;
+
+    /// Returns the current value stored in the lattice.
+    fn reveal_mut(&mut self) -> &mut Self::Element;
 
     /// Returns the current value stored in the lattice, taking ownership.
     fn into_revealed(self) -> Self::Element;

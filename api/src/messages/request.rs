@@ -1,7 +1,7 @@
 //! Provides the main [`Request`] struct and related types.
 
 use super::response::{Response, ResponseType};
-use crate::{metadata::MetadataKey, store::LatticeValue, ClientKey, Key};
+use crate::ClientKey;
 use std::collections::{HashMap, HashSet};
 
 /// An individual GET or PUT request; each request can batch multiple keys.
@@ -16,11 +16,7 @@ pub struct Request {
     /// The number of server addresses the client is aware of for a particular
     /// key; used for DHT membership change optimization.
     pub address_cache_size: HashMap<ClientKey, usize>,
-    /// The type and data of inner request.
-    #[serde(default)]
-    pub inner_operations: Vec<InnerKeyOperation>,
-    /// The type and data of client request.
-    #[serde(default)]
+    /// The type and data of this request.
     pub client_operations: Vec<ClientKeyOperation>,
     /// The request creation time.
     pub timestamp: chrono::DateTime<chrono::Utc>,
@@ -58,13 +54,13 @@ pub enum ClientKeyOperation {
 
 impl ClientKeyOperation {
     /// Returns the key that this operation reads/writes.
-    pub fn key(&self) -> Key {
+    pub fn key(&self) -> ClientKey {
         match self {
-            ClientKeyOperation::Get(key) => key.clone().into(),
-            ClientKeyOperation::Put(key, _) => key.clone().into(),
-            ClientKeyOperation::SetAdd(key, _) => key.clone().into(),
-            ClientKeyOperation::MapAdd(key, _) => key.clone().into(),
-            ClientKeyOperation::Inc(key, _) => key.clone().into(),
+            ClientKeyOperation::Get(key) => key.clone(),
+            ClientKeyOperation::Put(key, _) => key.clone(),
+            ClientKeyOperation::SetAdd(key, _) => key.clone(),
+            ClientKeyOperation::MapAdd(key, _) => key.clone(),
+            ClientKeyOperation::Inc(key, _) => key.clone(),
         }
     }
 
@@ -76,41 +72,6 @@ impl ClientKeyOperation {
             ClientKeyOperation::SetAdd(..) => ResponseType::SetAdd,
             ClientKeyOperation::MapAdd(..) => ResponseType::MapAdd,
             ClientKeyOperation::Inc(..) => ResponseType::Inc,
-        }
-    }
-}
-
-/// Abstraction for a single key operation. Only used inside anna.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum InnerKeyOperation {
-    /// Get the value of a key.
-    Get(Key),
-    /// Get the value of a metadata key.
-    GetMetadata(MetadataKey),
-    /// Assign a new value to a key.
-    Put(Key, LatticeValue),
-    /// Assign a new value to a metadata key.
-    PutMetadata(MetadataKey, Vec<u8>),
-}
-
-impl InnerKeyOperation {
-    /// Returns the key that this operation reads/writes.
-    pub fn key(&self) -> Key {
-        match self {
-            InnerKeyOperation::Get(key) => key.clone(),
-            InnerKeyOperation::GetMetadata(key) => key.clone().into(),
-            InnerKeyOperation::Put(key, _) => key.clone(),
-            InnerKeyOperation::PutMetadata(key, _) => key.clone().into(),
-        }
-    }
-
-    /// Returns the suitable [`ResponseType`] for the operation.
-    pub fn response_ty(&self) -> ResponseType {
-        match self {
-            InnerKeyOperation::Get(_) => ResponseType::Get,
-            InnerKeyOperation::GetMetadata(_) => ResponseType::Get,
-            InnerKeyOperation::Put(..) => ResponseType::Put,
-            InnerKeyOperation::PutMetadata(..) => ResponseType::Put,
         }
     }
 }

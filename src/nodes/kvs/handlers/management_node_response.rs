@@ -1,5 +1,5 @@
 use crate::{
-    messages::{management::NodeSet, request::RequestData, Request, Tier},
+    messages::{management::NodeSet, request::InnerKeyOperation, Request, Tier},
     metadata::MetadataKey,
     nodes::kvs::KvsNode,
 };
@@ -10,12 +10,15 @@ use std::{collections::HashMap, mem, time::Instant};
 
 impl KvsNode {
     /// Handles incoming management node responses.
-    pub async fn management_node_response_handler(&mut self, serialized: &str) -> eyre::Result<()> {
+    pub async fn management_node_response_handler(
+        &mut self,
+        serialized: &[u8],
+    ) -> eyre::Result<()> {
         let work_start = Instant::now();
 
         // Get the response.
         let func_nodes: NodeSet =
-            serde_json::from_str(serialized).context("failed to deserialize StringSet")?;
+            rmp_serde::from_slice(serialized).context("failed to deserialize StringSet")?;
 
         // Update extant_caches with the response.
         let mut deleted_caches = mem::take(&mut self.extant_caches);
@@ -62,14 +65,14 @@ impl KvsNode {
                 {
                     let response_address = self.wt.cache_ip_response_topic(&self.zenoh_prefix);
                     e.insert(Request {
-                        request: RequestData::Get {
-                            keys: vec![key.into()],
-                        },
+                        inner_operations: vec![InnerKeyOperation::GetMetadata(key)],
+                        client_operations: vec![],
                         // NB: response_address might not be necessary here
                         // (or in other places where req_id is constructed either).
                         request_id: Some(format!("{}:{}", response_address, self.request_id)),
                         response_address: Some(response_address.to_string()),
                         address_cache_size: Default::default(),
+                        timestamp: chrono::Utc::now(),
                     });
 
                     self.request_id += 1;
@@ -80,7 +83,7 @@ impl KvsNode {
         // Loop over the address request map and execute all the requests.
         for (address, request) in addr_request_map {
             let serialized_req =
-                serde_json::to_string(&request).context("failed to serialize KeyRequest")?;
+                rmp_serde::to_vec_named(&request).context("failed to serialize KeyRequest")?;
             self.zenoh
                 .put(&address, serialized_req)
                 .await

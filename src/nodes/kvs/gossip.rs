@@ -1,9 +1,9 @@
 use super::KvsNode;
 use crate::{
     messages::{
+        gossip::{GossipDataTuple, GossipRequest},
         key_data::{KeySize, KeySizeData},
-        request::{PutTuple, RequestData},
-        Request, Tier,
+        Tier,
     },
     nodes::kvs::report::ReportMessage,
     store::LatticeSizeEstimate,
@@ -101,24 +101,14 @@ impl KvsNode {
 
     /// Sends out gossip messages to relevant nodes and threads.
     async fn send_out_gossip(&mut self) -> eyre::Result<()> {
+        self.gossip_epoch += 1;
         let work_start = Instant::now();
 
         let mut addr_keyset_map: HashMap<String, HashSet<Key>> = HashMap::new();
-        for key in self.local_changeset.drain() {
+        for key in self.local_changeset.drain().collect::<Vec<Key>>() {
             // Get the threads that we need to gossip to.
             let threads = self
-                .hash_ring_util
-                .try_get_responsible_threads(
-                    self.wt.replication_response_topic(&self.zenoh_prefix),
-                    key.clone(),
-                    &self.global_hash_rings,
-                    &self.local_hash_rings,
-                    &self.key_replication_map,
-                    ALL_TIERS,
-                    &self.zenoh,
-                    &self.zenoh_prefix,
-                    &mut self.node_connections,
-                )
+                .try_get_responsible_threads(key.clone(), Some(ALL_TIERS))
                 .await
                 .context("failed to get responsible threads")?;
 
@@ -188,7 +178,7 @@ impl KvsNode {
             if !threads.is_empty() {
                 let target = threads.choose(&mut thread_rng()).unwrap();
                 let target_address = target.request_topic(&self.zenoh_prefix);
-                let serialized = serde_json::to_string(&message)
+                let serialized = rmp_serde::to_vec_named(&message)
                     .context("failed to serialize report Request message")?;
                 self.zenoh
                     .put(&target_address, serialized)
@@ -210,30 +200,43 @@ impl KvsNode {
             let mut tuples = Vec::new();
             for key in keys {
                 if let Some(value) = self.kvs.get(key) {
-                    tuples.push(PutTuple {
+                    tuples.push(GossipDataTuple {
                         key: key.clone(),
                         value: value.clone(),
                     });
                 }
             }
-            let request = Request {
-                request: RequestData::Put { tuples },
-                response_address: Default::default(),
-                request_id: Default::default(),
-                address_cache_size: Default::default(),
-            };
+            let request = GossipRequest { tuples };
             gossip_map.insert(address, request);
         }
 
         // send gossip
         for (addr, msg) in gossip_map {
             let serialized =
-                serde_json::to_string(&msg).context("failed to serialize KeyRequest")?;
+                rmp_serde::to_vec_named(&msg).context("failed to serialize KeyRequest")?;
             self.zenoh
                 .put(&addr.clone(), serialized)
                 .await
                 .map_err(|e| eyre!(e))
                 .context("failed to send gossip message")?;
+        }
+
+        Ok(())
+    }
+
+    /// Redirect gossip for the given address
+    pub async fn redirect_gossip(
+        &self,
+        gossip_map: HashMap<String, Vec<GossipDataTuple>>,
+    ) -> eyre::Result<()> {
+        for (gossip_address, tuples) in gossip_map {
+            let key_request = GossipRequest { tuples };
+            let serialized =
+                rmp_serde::to_vec_named(&key_request).context("failed to serialize KeyRequest")?;
+            self.zenoh
+                .put(&gossip_address, serialized)
+                .await
+                .map_err(|e| eyre::eyre!(e))?;
         }
 
         Ok(())

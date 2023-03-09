@@ -5,7 +5,7 @@ use crate::{
 
 impl RoutingNode {
     /// Returns the current cluster information as a reply to a seed message.
-    pub fn seed_handler(&self) -> String {
+    pub fn seed_handler(&self) -> Vec<u8> {
         log::info!("Received a global hash ring membership request.");
 
         let mut membership = ClusterInfo {
@@ -26,7 +26,7 @@ impl RoutingNode {
             membership.tiers.push(tier);
         }
 
-        serde_json::to_string(&membership).unwrap()
+        rmp_serde::to_vec_named(&membership).unwrap()
     }
 }
 
@@ -51,7 +51,7 @@ mod tests {
 
         assert_eq!(router.global_hash_rings[&Tier::Memory].len(), 3000);
 
-        let membership: ClusterInfo = serde_json::from_str(&serialized).unwrap();
+        let membership: ClusterInfo = rmp_serde::from_slice(&serialized).unwrap();
 
         assert_eq!(membership.tiers.len(), 1);
 
