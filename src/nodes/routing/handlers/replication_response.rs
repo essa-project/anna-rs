@@ -9,6 +9,7 @@ use crate::{
     AnnaError, ClientKey, Key, ALL_TIERS,
 };
 use eyre::{anyhow, bail, Context};
+use zenoh::prelude::r#async::AsyncResolve;
 
 impl RoutingNode {
     /// Handles incoming replication response messages.
@@ -143,6 +144,7 @@ impl RoutingNode {
                         .context("failed to serialize KeyAddressResponse")?;
                     self.zenoh
                         .put(&pending_key_req.reply_path.clone(), serialized)
+                        .res()
                         .await
                         .map_err(|e| eyre::eyre!(e))
                         .context("failed to send key address response")?;
@@ -190,7 +192,7 @@ mod tests {
 
         let key: ClientKey = "key".into();
 
-        let mut router = router_test_instance(zenoh.clone(), zenoh_prefix);
+        let mut router = router_test_instance(zenoh, zenoh_prefix);
         let entry = router.key_replication_map.entry(key.clone()).or_default();
 
         entry.global_replication.insert(Tier::Memory, 1);

@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 use crate::{
     messages::{AddressRequest, AddressResponse, KeyAddress, TcpMessage},
     nodes::{routing::RoutingNode, send_tcp_message},
@@ -7,6 +5,7 @@ use crate::{
 };
 use eyre::Context;
 use smol::net::TcpStream;
+use zenoh::prelude::r#async::AsyncResolve;
 
 impl RoutingNode {
     /// Handles incoming [`AddressRequest`] messages.
@@ -69,10 +68,7 @@ impl RoutingNode {
                             self.pending_requests.entry(key.clone()).or_default().push(
                                 crate::nodes::routing::PendingRequest {
                                     request_id: addr_request.request_id,
-                                    reply_path: addr_request
-                                        .response_address
-                                        .try_into()
-                                        .context("invalid response address")?,
+                                    reply_path: addr_request.response_address,
                                     reply_stream,
                                 },
                             );
@@ -117,6 +113,7 @@ impl RoutingNode {
                     .context("failed to serialize KeyAddressResponse")?;
                 self.zenoh
                     .put(&addr_request.response_address, serialized_reply)
+                    .res()
                     .await
                     .map_err(|e| eyre::eyre!(e))
                     .context("failed to send reply")?;
@@ -130,7 +127,8 @@ impl RoutingNode {
 
 #[cfg(test)]
 mod tests {
-    use zenoh::prelude::{Receiver, ZFuture};
+
+    use zenoh::prelude::sync::SyncResolve;
 
     use crate::{
         messages::{AddressRequest, AddressResponse, Tier},
@@ -144,9 +142,9 @@ mod tests {
     fn address() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .subscribe(format!("{}/**", zenoh_prefix))
-            .wait()
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
+            .res()
             .unwrap();
 
         let key = "key";
@@ -165,7 +163,7 @@ mod tests {
         smol::block_on(router.address_handler(req, None)).unwrap();
 
         let message = subscriber
-            .receiver()
+            .receiver
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
         let resp: AddressResponse =

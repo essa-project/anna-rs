@@ -12,6 +12,7 @@ use crate::{
 };
 use eyre::{anyhow, bail, Context};
 use std::{collections::HashMap, time::Instant};
+use zenoh::prelude::r#async::AsyncResolve;
 
 impl KvsNode {
     /// Handles incoming replication response messages.
@@ -158,6 +159,7 @@ impl KvsNode {
                                 .context("failed to serialize key response")?;
                             self.zenoh
                                 .put(request_addr, serialized_response)
+                                .res()
                                 .await
                                 .map_err(|e| eyre::eyre!(e))?;
                         }
@@ -238,6 +240,7 @@ impl KvsNode {
                             .context("failed to serialize KeyRequest")?;
                         self.zenoh
                             .put(&address, serialized)
+                            .res()
                             .await
                             .map_err(|e| eyre::eyre!(e))?;
                     }

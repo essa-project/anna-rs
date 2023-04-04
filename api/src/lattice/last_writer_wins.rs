@@ -82,17 +82,21 @@ where
     }
 
     fn merge_element(&mut self, element: &TimestampValuePair<T>) {
-        if element.timestamp > self.element.timestamp {
-            self.element = element.clone();
-        } else if element.timestamp == self.element.timestamp {
-            // TODO: Instead of panicking if values are different, use ar arbitrary
-            // deterministic mechanism to declare a winner. For example, sort by the
-            // raw byte representation of the values. The only requirement is that all
-            // nodes reach the same state, i.e. that the state becomes consistent.
-            assert_eq!(
-                element, &self.element,
-                "merge error: LwwLattices have identical timestamps but different values"
-            );
+        match element.timestamp.cmp(&self.element.timestamp) {
+            std::cmp::Ordering::Greater => {
+                self.element = element.clone();
+            }
+            std::cmp::Ordering::Equal => {
+                // TODO: Instead of panicking if values are different, use ar arbitrary
+                // deterministic mechanism to declare a winner. For example, sort by the
+                // raw byte representation of the values. The only requirement is that all
+                // nodes reach the same state, i.e. that the state becomes consistent.
+                assert_eq!(
+                    element, &self.element,
+                    "merge error: LwwLattices have identical timestamps but different values"
+                );
+            }
+            std::cmp::Ordering::Less => {}
         }
     }
 }

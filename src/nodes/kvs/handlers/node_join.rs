@@ -1,6 +1,7 @@
 use crate::{hash_ring::tier_name, messages, nodes::kvs::KvsNode, topics::KvsThread};
 use eyre::Context;
 use std::time::Instant;
+use zenoh::prelude::r#async::AsyncResolve;
 
 impl KvsNode {
     /// Handles incoming node join messages.
@@ -47,6 +48,7 @@ impl KvsNode {
                             .node_join_topic(&self.zenoh_prefix),
                         msg.as_str(),
                     )
+                    .res()
                     .await
                     .map_err(|e| eyre::eyre!(e))
                     .context("failed to send ip to new server node")?;
@@ -61,7 +63,7 @@ impl KvsNode {
                                 .put(
                                     &KvsThread::new(node_id.clone(), 0).node_join_topic(&self.zenoh_prefix),
                                     serialized.as_str(),
-                                )
+                                ).res()
                                 .await
                                 .map_err(|e| eyre::eyre!(e))
                                 .context(
@@ -85,6 +87,7 @@ impl KvsNode {
                                 .node_join_topic(&self.zenoh_prefix),
                             serialized.as_str(),
                         )
+                        .res()
                         .await
                         .map_err(|e| eyre::eyre!(e))
                         .context("failed to send ip of new server node to workers")?;
@@ -160,7 +163,8 @@ impl KvsNode {
 
 #[cfg(test)]
 mod tests {
-    use zenoh::prelude::{Receiver, ZFuture};
+
+    use zenoh::prelude::sync::SyncResolve;
 
     use crate::{
         messages::{self, Tier},
@@ -173,9 +177,9 @@ mod tests {
     fn basic_node_join() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .subscribe(format!("{}/**", zenoh_prefix))
-            .wait()
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
+            .res()
             .unwrap();
 
         let mut server = kvs_test_instance(zenoh.clone(), zenoh_prefix);
@@ -198,7 +202,7 @@ mod tests {
 
         let message_1: messages::Join = {
             let raw = subscriber
-                .receiver()
+                .receiver
                 .recv_timeout(Duration::from_secs(5))
                 .unwrap();
             serde_json::from_str(&raw.value.as_string().unwrap()).unwrap()
@@ -212,7 +216,7 @@ mod tests {
             },
         );
         let message_2 = subscriber
-            .receiver()
+            .receiver
             .recv_timeout(Duration::from_secs(5))
             .unwrap();
         let message_2_parsed: messages::Join =
@@ -231,7 +235,7 @@ mod tests {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
 
-        let mut server = kvs_test_instance(zenoh.clone(), zenoh_prefix);
+        let mut server = kvs_test_instance(zenoh, zenoh_prefix);
 
         assert_eq!(server.global_hash_rings[&Tier::Memory].len(), 3000);
         assert_eq!(

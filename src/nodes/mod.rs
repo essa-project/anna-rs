@@ -10,6 +10,7 @@ use eyre::{bail, Context};
 use futures::{AsyncReadExt, StreamExt};
 use smol::{io::AsyncWriteExt, net::TcpStream};
 use std::{convert::TryInto, time::Duration};
+use zenoh::prelude::r#async::AsyncResolve;
 
 pub mod client;
 pub mod kvs;
@@ -90,11 +91,12 @@ pub async fn request_cluster_info(
     let membership = loop {
         let replies = zenoh
             .get(&RoutingThread::seed_topic(zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre::eyre!(e))
             .context("failed to query seed node")?;
 
-        let mut replies = replies.collect::<Vec<_>>().await;
+        let mut replies = replies.into_stream().collect::<Vec<_>>().await;
         match replies.as_mut_slice() {
             [] if i < 30 => {
                 futures_timer::Delay::new(Duration::from_millis(100 * i)).await;
@@ -105,8 +107,15 @@ pub async fn request_cluster_info(
             }
             [reply] => {
                 // add all the addresses that seed node sent
-                break serde_json::from_str(&reply.sample.value.as_string()?)
-                    .context("failed to deserialize ClusterMembership")?;
+                break serde_json::from_str(
+                    &reply
+                        .sample
+                        .as_ref()
+                        .map_err(|err| eyre::eyre!(err.clone()))?
+                        .value
+                        .as_string()?,
+                )
+                .context("failed to deserialize ClusterMembership")?;
             }
             _ => bail!("multiple replies received from seed node"),
         };

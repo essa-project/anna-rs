@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use eyre::Context;
+use zenoh::prelude::r#async::AsyncResolve;
 
 use crate::{hash_ring::tier_name, messages, nodes::kvs::KvsNode, topics::KvsThread};
 
@@ -37,6 +38,7 @@ impl KvsNode {
                             .node_depart_topic(&self.zenoh_prefix),
                         serialized.as_str(),
                     )
+                    .res()
                     .await
                     .map_err(|e| eyre::eyre!(e))?;
             }
@@ -59,7 +61,8 @@ impl KvsNode {
 
 #[cfg(test)]
 mod tests {
-    use zenoh::prelude::{Receiver, ZFuture};
+
+    use zenoh::prelude::sync::SyncResolve;
 
     use crate::{
         messages::{self, Tier},
@@ -74,9 +77,9 @@ mod tests {
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
 
         let zenoh_clone = zenoh.clone();
-        let mut subscriber = zenoh_clone
-            .subscribe(format!("{}/**", zenoh_prefix))
-            .wait()
+        let subscriber = zenoh_clone
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
+            .res()
             .unwrap();
 
         let mut server = kvs_test_instance(zenoh, zenoh_prefix);
@@ -102,7 +105,7 @@ mod tests {
         smol::block_on(server.node_depart_handler(departed.clone())).unwrap();
 
         let message = subscriber
-            .receiver()
+            .receiver
             .recv_timeout(Duration::from_secs(5))
             .unwrap();
         let message_parsed: messages::Departed =

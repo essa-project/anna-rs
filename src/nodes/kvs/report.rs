@@ -17,6 +17,7 @@ use std::{
     collections::{BTreeSet, HashMap},
     time::{Duration, Instant},
 };
+use zenoh::prelude::r#async::AsyncResolve;
 
 // define server's key monitoring threshold
 const K_KEY_MONITORING_THRESHOLD: Duration = Duration::from_secs(60);
@@ -97,6 +98,7 @@ impl ReportData {
     }
 
     /// Starts the next reporting epoch and returns the report messages that should be sent out.
+    #[allow(clippy::too_many_arguments)]
     pub async fn next_epoch(
         &mut self,
         duration: Duration,
@@ -125,6 +127,7 @@ impl ReportData {
                         response_topic: wt.management_node_response_topic(zenoh_prefix).to_string(),
                     })?,
                 )
+                .res()
                 .await
                 .map_err(|e| eyre::eyre!(e))?;
         }

@@ -5,6 +5,7 @@ use crate::{
 };
 use eyre::{anyhow, bail, Context};
 use std::time::Instant;
+use zenoh::prelude::r#async::AsyncResolve;
 
 impl<'a> MonitoringNode<'a> {
     pub(in crate::nodes::monitoring) async fn depart_done_handler(
@@ -51,6 +52,7 @@ impl<'a> MonitoringNode<'a> {
                             departed_node_id: departed.node_id,
                         })?,
                     )
+                    .res()
                     .await
                     .map_err(|e| eyre::eyre!(e))?;
             }

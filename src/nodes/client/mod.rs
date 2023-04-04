@@ -30,6 +30,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use zenoh::prelude::r#async::AsyncResolve;
 
 use super::{receive_tcp_message, send_tcp_message};
 
@@ -124,14 +125,15 @@ impl ClientNode {
             let zenoh = zenoh.clone();
             let (tx, rx) = channel::bounded(10);
             receive_tasks.push(Box::pin(async move {
-                let mut changes = zenoh
-                    .subscribe(topic)
+                let changes = zenoh
+                    .declare_subscriber(topic)
+                    .res()
                     .await
                     .map_err(|e| eyre!(e))
                     .context("failed to declare subscriber")?;
 
                 loop {
-                    let change = match changes.receiver().next().await {
+                    let change = match changes.receiver.recv_async().await.ok() {
                         Some(c) => c,
                         None => break,
                     };
@@ -184,13 +186,14 @@ impl ClientNode {
             tasks.push(async {
                 let reply = loop {
                     let topic = routing_thread.tcp_addr_topic(&self.zenoh_prefix);
-                    let mut receiver = zenoh
+                    let receiver = zenoh
                         .get(&topic)
+                        .res()
                         .await
                         .map_err(|e| eyre!(e))
                         .context("failed to query tcp address of routing thread")?;
-                    match receiver.next().await {
-                        Some(reply) => break reply.sample.value,
+                    match receiver.recv_async().await.ok() {
+                        Some(reply) => break reply.sample.map_err(|err| eyre::eyre!(err))?.value,
                         None => {
                             log::info!("failed to receive tcp address reply");
                             futures_timer::Delay::new(Duration::from_secs(1)).await;
@@ -297,7 +300,7 @@ impl ClientNode {
         let request = ClientRequest {
             key,
             put_value: Some(lattice),
-            response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
+            response_address: self.ut.response_topic(&self.zenoh_prefix),
             request_id: request_id.clone(),
             address_cache_size: HashMap::new(),
             timestamp: Instant::now(),
@@ -324,7 +327,7 @@ impl ClientNode {
         let request = ClientRequest {
             key,
             put_value: None,
-            response_address: self.ut.response_topic(&self.zenoh_prefix).to_string(),
+            response_address: self.ut.response_topic(&self.zenoh_prefix),
             request_id: request_id.clone(),
             address_cache_size: HashMap::new(),
             timestamp: Instant::now(),
@@ -727,6 +730,7 @@ impl ClientNode {
                     &target.request_topic(&self.zenoh_prefix),
                     serde_json::to_string(request).context("failed to serialize Request")?,
                 )
+                .res()
                 .await
                 .map_err(|e| eyre!(e))
                 .context("zenoh put failed")
@@ -749,7 +753,7 @@ impl ClientNode {
             response_address: self
                 .ut
                 .address_response_topic(&self.zenoh_prefix)
-                .to_string(),
+                ,
             keys: vec![key.clone()],
         };
 
@@ -768,6 +772,7 @@ impl ClientNode {
                     &rt_thread.address_request_topic(&self.zenoh_prefix),
                     serialized,
                 )
+                .res()
                 .await
                 .map_err(|e| eyre!(e))?;
         }

@@ -27,6 +27,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use zenoh::prelude::r#async::AsyncResolve;
 
 use super::{receive_tcp_message, request_cluster_info, send_tcp_message};
 
@@ -119,7 +120,7 @@ pub fn run(
                 .await?;
                 node.run(shutdown.next().map(|_| ()))
                     .await
-                    .context(format!("KVS thread {}/{} failed", node_id, thread_id))
+                    .context(format!("KVS thread {node_id}/{thread_id} failed"))
             };
             s.spawn(move |_| {
                 smol::block_on(async {
@@ -379,6 +380,7 @@ impl KvsNode {
                                 serde_json::to_string(&join_msg)
                                     .context("failed to serialize join message")?,
                             )
+                            .res()
                             .await
                             .map_err(|e| eyre!(e))
                             .context("failed to send join message to servers")?;
@@ -396,6 +398,7 @@ impl KvsNode {
                         &RoutingThread::new(node_id.clone(), 0).notify_topic(&self.zenoh_prefix),
                         notify_msg.as_str(),
                     )
+                    .res()
                     .await
                     .map_err(|e| eyre!(e))
                     .context("failed to send join message to routing nodes")?;
@@ -407,6 +410,7 @@ impl KvsNode {
                     &MonitoringThread::notify_topic(&self.zenoh_prefix),
                     notify_msg.as_str(),
                 )
+                .res()
                 .await
                 .map_err(|e| eyre!(e))
                 .context("failed to send join message to monitoring nodes")?;
@@ -415,77 +419,87 @@ impl KvsNode {
         let zenoh = self.zenoh.clone();
 
         // listens for a new node joining
-        let mut join_subscriber = zenoh
-            .subscribe(&self.wt.node_join_topic(&self.zenoh_prefix))
+        let join_subscriber = zenoh
+            .declare_subscriber(&self.wt.node_join_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre!(e))
             .context("failed to declare join subscriber")?;
-        let mut join_stream = join_subscriber.receiver().fuse();
+        let mut join_stream = join_subscriber.receiver.into_stream();
 
         // listens for a node departing
-        let mut depart_subscriber = zenoh
-            .subscribe(&self.wt.node_depart_topic(&self.zenoh_prefix))
+        let depart_subscriber = zenoh
+            .declare_subscriber(&self.wt.node_depart_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre!(e))
             .context("failed to declare depart subscriber")?;
-        let mut depart_stream = depart_subscriber.receiver().fuse();
+        let mut depart_stream = depart_subscriber.receiver.into_stream();
 
         // responsible for listening for a command that this node should leave
-        let mut self_depart_subscriber = zenoh
-            .subscribe(&self.wt.self_depart_topic(&self.zenoh_prefix))
+        let self_depart_subscriber = zenoh
+            .declare_subscriber(&self.wt.self_depart_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre!(e))
             .context("failed to declare self depart subscriber")?;
-        let mut self_depart_stream = self_depart_subscriber.receiver().fuse();
+        let mut self_depart_stream = self_depart_subscriber.receiver.into_stream();
 
         // responsible for handling requests
-        let mut request_subscriber = zenoh
-            .subscribe(&self.wt.request_topic(&self.zenoh_prefix))
+        let request_subscriber = zenoh
+            .declare_subscriber(&self.wt.request_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre!(e))
             .context("failed to declare request subscriber")?;
-        let mut request_stream = request_subscriber.receiver().fuse();
+        let mut request_stream = request_subscriber.receiver.into_stream();
 
         // responsible for processing gossip
-        let mut gossip_subscriber = zenoh
-            .subscribe(&self.wt.gossip_topic(&self.zenoh_prefix))
+        let gossip_subscriber = zenoh
+            .declare_subscriber(&self.wt.gossip_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre!(e))
             .context("failed to declare gossip subscriber")?;
-        let mut gossip_stream = gossip_subscriber.receiver().fuse();
+        let mut gossip_stream = gossip_subscriber.receiver.into_stream();
 
         // responsible for listening for key replication factor response
-        let mut replication_response_subscriber = zenoh
-            .subscribe(&self.wt.replication_response_topic(&self.zenoh_prefix))
+        let replication_response_subscriber = zenoh
+            .declare_subscriber(&self.wt.replication_response_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre!(e))
             .context("failed to declare replication response subscriber")?;
-        let mut replication_response_stream = replication_response_subscriber.receiver().fuse();
+        let mut replication_response_stream =
+            replication_response_subscriber.receiver.into_stream();
 
         // responsible for listening for key replication factor change
-        let mut replication_change_subscriber = zenoh
-            .subscribe(&self.wt.replication_change_topic(&self.zenoh_prefix))
+        let replication_change_subscriber = zenoh
+            .declare_subscriber(&self.wt.replication_change_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre!(e))
             .context("failed to declare replication change subscriber")?;
-        let mut replication_change_stream = replication_change_subscriber.receiver().fuse();
+        let mut replication_change_stream = replication_change_subscriber.receiver.into_stream();
 
         // responsible for listening for cached keys response messages.
-        let mut cache_ip_subscriber = zenoh
-            .subscribe(&self.wt.cache_ip_response_topic(&self.zenoh_prefix))
+        let cache_ip_subscriber = zenoh
+            .declare_subscriber(&self.wt.cache_ip_response_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre!(e))
             .context("failed to declare cache ip subscriber")?;
-        let mut cache_ip_stream = cache_ip_subscriber.receiver().fuse();
+        let mut cache_ip_stream = cache_ip_subscriber.receiver.into_stream();
 
         // responsible for listening for function node IP lookup response messages.
-        let mut management_node_response_subscriber = zenoh
-            .subscribe(&self.wt.management_node_response_topic(&self.zenoh_prefix))
+        let management_node_response_subscriber = zenoh
+            .declare_subscriber(&self.wt.management_node_response_topic(&self.zenoh_prefix))
+            .res()
             .await
             .map_err(|e| eyre!(e))
             .context("failed to declare management node response subscriber")?;
         let mut management_node_response_stream =
-            management_node_response_subscriber.receiver().fuse();
+            management_node_response_subscriber.receiver.into_stream();
 
         match self.config_data.self_tier {
             Tier::Memory => {
@@ -605,14 +619,15 @@ impl KvsNode {
             tasks.push(async move {
                 let reply = loop {
                     let topic = routing_thread.tcp_addr_topic(&s.zenoh_prefix);
-                    let mut receiver = s
+                    let receiver = s
                         .zenoh
                         .get(&topic)
+                        .res()
                         .await
                         .map_err(|e| eyre!(e))
                         .context("failed to query tcp address of routing thread")?;
-                    match receiver.next().await {
-                        Some(reply) => break reply.sample.value,
+                    match receiver.recv_async().await.ok() {
+                        Some(reply) => break reply.sample.map_err(|err| eyre::eyre!(err))?.value,
                         None => {
                             log::info!("failed to receive tcp address reply");
                             futures_timer::Delay::new(Duration::from_secs(1)).await;
@@ -755,7 +770,7 @@ struct PendingGossip {
 }
 
 #[cfg(test)]
-fn kvs_test_instance<'a>(zenoh: Arc<zenoh::Session>, zenoh_prefix: String) -> KvsNode {
+fn kvs_test_instance(zenoh: Arc<zenoh::Session>, zenoh_prefix: String) -> KvsNode {
     let config_data = ConfigData {
         self_tier: Tier::Memory,
         thread_num: 1,

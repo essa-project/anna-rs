@@ -20,7 +20,7 @@ use std::{
 /// for testing.
 ///
 /// To communicate with routing and KVS nodes, the client uses the given zenoh workspace.
-pub fn run_interactive<'a>(
+pub fn run_interactive(
     config: &Config,
     stdin: &mut dyn Read,
     stdout: &mut dyn Write,
@@ -119,7 +119,7 @@ impl ClientNode {
                 "quit" | "exit" | "q" => break,
                 _ => {
                     if let Err(err) = self.handle_interactive_request(input, stdout) {
-                        writeln!(stderr, "Error: {:#}", err)?;
+                        writeln!(stderr, "Error: {err:#}")?;
                         if fail_fast {
                             bail!(err);
                         }
@@ -170,7 +170,7 @@ impl ClientNode {
                 let string = String::from_utf8(value).context("value is not valid utf8")?;
 
                 log::trace!("[OK] Got {} from GET", string);
-                writeln!(stdout, "{}", string)?;
+                writeln!(stdout, "{string}")?;
             }
             "PUT_SET" | "put_set" => {
                 let key = split
@@ -231,7 +231,7 @@ impl ClientNode {
                 }
 
                 for (k, v) in mkcl.dependencies.reveal() {
-                    write!(stdout, "{} : ", k)?;
+                    write!(stdout, "{k} : ")?;
                     for vc_pair in v.reveal() {
                         writeln!(stdout, "{{{} : {}}}", vc_pair.0, vc_pair.1.reveal())?;
                     }

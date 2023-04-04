@@ -20,7 +20,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use zenoh::prelude::ZFuture;
+use zenoh::prelude::sync::SyncResolve;
 
 #[derive(FromArgs)]
 /// Rusty anna client
@@ -47,7 +47,7 @@ fn main() -> eyre::Result<()> {
         .enumerate()
     {
         match thread.join() {
-            Ok(result) => result.with_context(|| format!("thread {} failed", thread_id))?,
+            Ok(result) => result.with_context(|| format!("thread {thread_id} failed"))?,
             Err(panic_payload) => std::panic::resume_unwind(panic_payload),
         }
     }
@@ -68,10 +68,7 @@ fn set_up_logger(thread_id: u32) -> Result<(), fern::InitError> {
         })
         .level(log::LevelFilter::Info)
         .chain(std::io::stdout())
-        .chain(fern::log_file(format!(
-            "benchmark-thread-{}.log",
-            thread_id
-        ))?)
+        .chain(fern::log_file(format!("benchmark-thread-{thread_id}.log"))?)
         .apply()?;
     Ok(())
 }
@@ -86,7 +83,7 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
 
     let zenoh = Arc::new(
         zenoh::open(zenoh::config::Config::default())
-            .wait()
+            .res()
             .map_err(|e| eyre::eyre!(e))?,
     );
     let zenoh_prefix = anna_default_zenoh_prefix();
@@ -95,7 +92,7 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
 
     let timeout = Duration::from_secs(10);
 
-    let cluster_info = smol::block_on(request_cluster_info(&zenoh, &zenoh_prefix))?;
+    let cluster_info = smol::block_on(request_cluster_info(&zenoh, zenoh_prefix))?;
     let routing_ips = cluster_info.routing_node_ids.iter(); // TODO: also consider config.user.routing-elb
     let routing_threads: Vec<_> = routing_ips
         .flat_map(|id| (0..config.threads.routing).map(move |i| RoutingThread::new(id.clone(), i)))
@@ -111,13 +108,13 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
     )?;
     smol::block_on(client.init_tcp_connections())?;
 
-    let mut commands = zenoh
-        .subscribe(&benchmark_topic(thread_id, zenoh_prefix))
-        .wait()
+    let commands = zenoh
+        .declare_subscriber(&benchmark_topic(thread_id, zenoh_prefix))
+        .res()
         .map_err(|e| eyre::eyre!(e))
         .context("failed to declare subscriber for benchmark commands")?;
 
-    for message in commands.receiver().iter() {
+    for message in commands.receiver.iter() {
         let serialized = message.value.as_string()?;
         log::info!("Received benchmark command `{}`", serialized);
 
@@ -281,7 +278,7 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
                         let latency = 1000000.0 / throughput;
 
                         let mut feedback = UserFeedback {
-                            uid: format!("{}:{}", node_id, thread_id),
+                            uid: format!("{node_id}:{thread_id}"),
                             latency,
                             throughput,
                             finish: Default::default(),
@@ -307,7 +304,7 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
                                 &MonitoringThread::feedback_report_topic(zenoh_prefix),
                                 serialized_latency.as_str(),
                             )
-                            .wait()
+                            .res()
                             .map_err(|e| eyre::eyre!(e))?;
 
                         count = 0;
@@ -324,7 +321,7 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
                 log::info!("Finished");
 
                 let feedback = UserFeedback {
-                    uid: format!("{}:{}", node_id, thread_id),
+                    uid: format!("{node_id}:{thread_id}"),
                     finish: true,
                     latency: Default::default(),
                     throughput: Default::default(),
@@ -340,7 +337,7 @@ fn run(thread_id: u32, config: Config) -> eyre::Result<()> {
                         &MonitoringThread::feedback_report_topic(zenoh_prefix),
                         serialized_latency.as_str(),
                     )
-                    .wait()
+                    .res()
                     .map_err(|e| eyre::eyre!(e))?;
             }
             "WARM" => {
@@ -453,5 +450,5 @@ fn sample(n: usize, sum_probs: &HashMap<usize, f64>) -> usize {
 }
 
 fn generate_key(n: usize) -> ClientKey {
-    format!("{:08}", n).into()
+    format!("{n:08}").into()
 }

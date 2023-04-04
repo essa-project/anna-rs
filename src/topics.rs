@@ -2,8 +2,6 @@
 //!
 //! Allows to address specific threads of specific nodes.
 
-use std::convert::TryInto;
-
 // The topic on which clients send key address requests to routing nodes.
 const KEY_ADDRESS_TOPIC: &str = "key_address";
 
@@ -103,8 +101,6 @@ impl KvsThread {
             "{}/{}/{}/{}",
             prefix, self.node_id, NODE_JOIN_TOPIC, self.thread_id
         )
-        .try_into()
-        .unwrap()
     }
 
     /// After nodes departed the cluster, a [`Departed`][crate::messages::Departed]
@@ -114,8 +110,6 @@ impl KvsThread {
             "{}/{}/{}/{}",
             prefix, self.node_id, NODE_DEPART_TOPIC, self.thread_id
         )
-        .try_into()
-        .unwrap()
     }
 
     /// Topic for notifying a node thread that it itself should leave.
@@ -127,8 +121,6 @@ impl KvsThread {
             "{}/{}/{}/{}",
             prefix, self.node_id, SELF_DEPART_TOPIC, self.thread_id
         )
-        .try_into()
-        .unwrap()
     }
 
     /// The topic on which [`Request`][crate::messages::Request] messages are sent.
@@ -137,8 +129,6 @@ impl KvsThread {
             "{}/{}/{}/{}",
             prefix, self.node_id, KEY_REQUEST_TOPIC, self.thread_id
         )
-        .try_into()
-        .unwrap()
     }
 
     /// Topic on which gossip messages are sent.
@@ -149,8 +139,6 @@ impl KvsThread {
             "{}/{}/{}/{}",
             prefix, self.node_id, GOSSIP_TOPIC, self.thread_id
         )
-        .try_into()
-        .unwrap()
     }
 
     /// Used to notify KVS threads about replication factor changes.
@@ -163,8 +151,6 @@ impl KvsThread {
             "{}/{}/{}/{}",
             prefix, self.node_id, SERVER_REPLICATION_CHANGE_TOPIC, self.thread_id
         )
-        .try_into()
-        .unwrap()
     }
 
     /// The topic on which responses to replication requests are sent.
@@ -175,8 +161,6 @@ impl KvsThread {
             "{}/{}/{}/{}",
             prefix, self.node_id, SERVER_REPLICATION_RESPONSE_TOPIC, self.thread_id
         )
-        .try_into()
-        .unwrap()
     }
 
     /// Used for cached keys response messages, not fully implemented yet.
@@ -185,8 +169,6 @@ impl KvsThread {
             "{}/{}/{}/{}",
             prefix, self.node_id, CACHE_IP_RESPONSE_TOPIC, self.thread_id
         )
-        .try_into()
-        .unwrap()
     }
 
     /// Used for response messages from the management node, not fully implemented yet.
@@ -195,8 +177,6 @@ impl KvsThread {
             "{}/{}/{}/{}",
             prefix, self.node_id, MANAGEMENT_NODE_RESPONSE_TOPIC, self.thread_id
         )
-        .try_into()
-        .unwrap()
     }
 }
 
@@ -225,8 +205,6 @@ impl ClientThread {
             "{}/{}/{}/{}",
             prefix, self.node_id, USER_RESPONSE_TOPIC, self.thread_id
         )
-        .try_into()
-        .unwrap()
     }
 
     /// The topic on which [`AddressResponse`][crate::messages::AddressResponse] messages should
@@ -239,8 +217,6 @@ impl ClientThread {
             "{}/{}/{}/{}",
             prefix, self.node_id, USER_KEY_ADDRESS_TOPIC, self.thread_id
         )
-        .try_into()
-        .unwrap()
     }
 }
 
@@ -263,14 +239,12 @@ impl RoutingThread {
     /// message. Unlike most other messages in this crate, the `"join"` is sent as
     /// zenoh [`get`][zenoh::Workspace::get] requests with an immediate reply.
     pub fn seed_topic(prefix: &str) -> String {
-        format!("{}/{}", prefix, SEED_TOPIC).try_into().unwrap()
+        format!("{prefix}/{SEED_TOPIC}")
     }
 
     /// Each routing node broadcasts its ID on this topic.
     pub fn advertisement_topic(prefix: &str) -> String {
-        format!("{}/{}", prefix, ADVERTISEMENT_TOPIC)
-            .try_into()
-            .unwrap()
+        format!("{prefix}/{ADVERTISEMENT_TOPIC}")
     }
 
     /// Addresses the given thread on the given routing node.
@@ -281,8 +255,6 @@ impl RoutingThread {
     /// Topic used for creating a point-to-point connection to this routing thread.
     pub fn p2p_topic(&self, prefix: &str) -> String {
         format!("{}/{}/{}", prefix, self.node_id, self.thread_id)
-            .try_into()
-            .unwrap()
     }
 
     /// Nodes can request the public IP address of the routing node under this topic.
@@ -291,8 +263,6 @@ impl RoutingThread {
             "{}/{}/{}/{}",
             prefix, self.node_id, TCP_PORT_TOPIC, self.thread_id
         )
-        .try_into()
-        .unwrap()
     }
 
     /// Used to notify routing threads of node joins and departures.
@@ -303,8 +273,6 @@ impl RoutingThread {
             "{}/{}/{}/{}",
             prefix, self.node_id, ROUTING_NOTIFY_TOPIC, self.thread_id
         )
-        .try_into()
-        .unwrap()
     }
 
     /// Client nodes request the KVS node responsible for a given key on this topic.
@@ -315,8 +283,6 @@ impl RoutingThread {
             "{}/{}/{}/{}",
             prefix, self.node_id, KEY_ADDRESS_TOPIC, self.thread_id
         )
-        .try_into()
-        .unwrap()
     }
 
     /// Topic for notifying routing nodes of replication changes.
@@ -328,8 +294,6 @@ impl RoutingThread {
             "{}/{}/{}/{}",
             prefix, self.node_id, ROUTING_REPLICATION_CHANGE_TOPIC, self.thread_id
         )
-        .try_into()
-        .unwrap()
     }
 
     /// The topic on which responses to replication requests are sent.
@@ -340,15 +304,11 @@ impl RoutingThread {
             "{}/{}/{}/{}",
             prefix, self.node_id, ROUTING_REPLICATION_RESPONSE_TOPIC, self.thread_id
         )
-        .try_into()
-        .unwrap()
     }
 
     /// The routing node responds to "ping" messages sent on this topic.
     pub fn ping_topic(&self, prefix: &str) -> String {
         format!("{}/{}/{}/{}", prefix, self.node_id, "ping", self.thread_id)
-            .try_into()
-            .unwrap()
     }
 }
 
@@ -368,9 +328,7 @@ impl MonitoringThread {
     ///
     /// Sent messages are of type [`Notify`][crate::messages::Notify].
     pub fn notify_topic(prefix: &str) -> String {
-        format!("{}/{}", prefix, MONITORING_NOTIFY_TOPIC)
-            .try_into()
-            .unwrap()
+        format!("{prefix}/{MONITORING_NOTIFY_TOPIC}")
     }
 
     /// Monitoring nodes are informed about finished departures on this topic.
@@ -378,8 +336,6 @@ impl MonitoringThread {
     /// Sent messages are of type [`Departed`][crate::messages::Departed].
     pub fn depart_done_topic(&self, prefix: &str) -> String {
         format!("{}/{}/{}", prefix, self.node_id, DEPART_DONE_TOPIC)
-            .try_into()
-            .unwrap()
     }
 
     /// Monitoring nodes expect responses on this topic.
@@ -387,16 +343,12 @@ impl MonitoringThread {
     /// Sent messages are of type [`Response`][crate::messages::Response].
     pub fn response_topic(&self, prefix: &str) -> String {
         format!("{}/{}/{}", prefix, self.node_id, MONITORING_RESPONSE_TOPIC)
-            .try_into()
-            .unwrap()
     }
 
     /// Benchmarking nodes send [`UserFeedback`][crate::messages::user_feedback::UserFeedback]
     /// messages to the monitoring nodes on this topic.
     pub fn feedback_report_topic(prefix: &str) -> String {
-        format!("{}/{}", prefix, FEEDBACK_REPORT_TOPIC)
-            .try_into()
-            .unwrap()
+        format!("{prefix}/{FEEDBACK_REPORT_TOPIC}")
     }
 }
 
@@ -418,8 +370,6 @@ impl CacheThread {
             "{}/{}/{}/{}",
             prefix, self.node_id, CACHE_UPDATE_TOPIC, self.tid
         )
-        .try_into()
-        .unwrap()
     }
 }
 
@@ -447,8 +397,6 @@ impl ManagementThread {
     /// [`AddNodes`][crate::messages::management::AddNodes].
     pub fn add_nodes_topic(&self, prefix: &str) -> String {
         format!("{}/{}/{}", prefix, self.node_id, Self::ADD_NODES_TOPIC)
-            .try_into()
-            .unwrap()
     }
 
     /// Tells the management node to shut down a node.
@@ -457,8 +405,6 @@ impl ManagementThread {
     /// [`RemoveNode`][crate::messages::management::RemoveNode].
     pub fn remove_node_topic(&self, prefix: &str) -> String {
         format!("{}/{}/{}", prefix, self.node_id, Self::REMOVE_NODE_TOPIC)
-            .try_into()
-            .unwrap()
     }
 
     /// Topic on which
@@ -471,17 +417,10 @@ impl ManagementThread {
             self.node_id,
             Self::QUERY_FUNC_NODES_TOPIC
         )
-        .try_into()
-        .unwrap()
     }
 }
 
 /// Topic on which commands to benchmark nodes are sent.
 pub fn benchmark_topic(thread_id: u32, zenoh_prefix: &str) -> String {
-    format!(
-        "{}/benchmark/{}/{}",
-        zenoh_prefix, BENCHMARK_COMMAND_TOPIC, thread_id,
-    )
-    .try_into()
-    .unwrap()
+    format!("{zenoh_prefix}/benchmark/{BENCHMARK_COMMAND_TOPIC}/{thread_id}",)
 }

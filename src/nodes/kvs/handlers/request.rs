@@ -9,6 +9,7 @@ use crate::{
 use eyre::Context;
 use smol::net::TcpStream;
 use std::time::Instant;
+use zenoh::prelude::r#async::AsyncResolve;
 
 impl KvsNode {
     /// Handles incoming request messages.
@@ -155,6 +156,7 @@ impl KvsNode {
                         .context("failed to serialize key response")?;
                     self.zenoh
                         .put(&response_addr, serialized_response)
+                        .res()
                         .await
                         .map_err(|e| eyre::eyre!(e))?;
                 }
@@ -167,7 +169,8 @@ impl KvsNode {
 
 #[cfg(test)]
 mod tests {
-    use zenoh::prelude::{Receiver, ZFuture};
+
+    use zenoh::prelude::sync::SyncResolve;
 
     use crate::{
         lattice::{
@@ -203,7 +206,7 @@ mod tests {
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)
-                    .to_string(),
+                    ,
             ),
             request_id: Some(request_id),
             address_cache_size: Default::default(),
@@ -227,7 +230,7 @@ mod tests {
             response_address: Some(
                 ClientThread::new(node_id, 0)
                     .response_topic(zenoh_prefix)
-                    .to_string(),
+                    ,
             ),
             request_id: Some(request_id),
             address_cache_size: Default::default(),
@@ -238,9 +241,9 @@ mod tests {
     fn user_get_lww_test() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .subscribe(format!("{}/**", zenoh_prefix))
-            .wait()
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
+            .res()
             .unwrap();
 
         let mut server = kvs_test_instance(zenoh.clone(), zenoh_prefix.clone());
@@ -264,7 +267,7 @@ mod tests {
         smol::block_on(server.request_handler(get_request, None)).unwrap();
 
         let message = subscriber
-            .receiver()
+            .receiver
             .recv_timeout(Duration::from_secs(5))
             .unwrap();
 
@@ -288,9 +291,9 @@ mod tests {
     fn user_get_set_test() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .subscribe(format!("{}/**", zenoh_prefix))
-            .wait()
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
+            .res()
             .unwrap();
 
         let mut server = kvs_test_instance(zenoh.clone(), zenoh_prefix.clone());
@@ -320,7 +323,7 @@ mod tests {
         smol::block_on(server.request_handler(get_request, None)).unwrap();
 
         let message = subscriber
-            .receiver()
+            .receiver
             .recv_timeout(Duration::from_secs(5))
             .unwrap();
 
@@ -347,9 +350,9 @@ mod tests {
     fn user_get_ordered_set_test() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .subscribe(format!("{}/**", zenoh_prefix))
-            .wait()
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
+            .res()
             .unwrap();
 
         let mut server = kvs_test_instance(zenoh.clone(), zenoh_prefix.clone());
@@ -383,7 +386,7 @@ mod tests {
         smol::block_on(server.request_handler(get_request, None)).unwrap();
 
         let message = subscriber
-            .receiver()
+            .receiver
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
 
@@ -410,9 +413,9 @@ mod tests {
     fn user_get_causal_test() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .subscribe(format!("{}/**", zenoh_prefix))
-            .wait()
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
+            .res()
             .unwrap();
 
         let key: ClientKey = "key".into();
@@ -452,7 +455,7 @@ mod tests {
         smol::block_on(server.request_handler(get_request, None)).unwrap();
 
         let message = subscriber
-            .receiver()
+            .receiver
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
         let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
@@ -478,9 +481,9 @@ mod tests {
     fn user_put_and_get_lww_test() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .subscribe(format!("{}/**", zenoh_prefix))
-            .wait()
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
+            .res()
             .unwrap();
 
         let key: ClientKey = "key".into();
@@ -504,7 +507,7 @@ mod tests {
         smol::block_on(server.request_handler(put_request, None)).unwrap();
 
         let message = subscriber
-            .receiver()
+            .receiver
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
         let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
@@ -532,7 +535,7 @@ mod tests {
         smol::block_on(server.request_handler(get_request, None)).unwrap();
 
         let message = subscriber
-            .receiver()
+            .receiver
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
         let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
@@ -558,9 +561,9 @@ mod tests {
     fn user_put_and_get_set_test() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .subscribe(format!("{}/**", zenoh_prefix))
-            .wait()
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
+            .res()
             .unwrap();
 
         let key: ClientKey = "key".into();
@@ -587,7 +590,7 @@ mod tests {
         smol::block_on(server.request_handler(put_request, None)).unwrap();
 
         let message = subscriber
-            .receiver()
+            .receiver
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
         let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
@@ -615,7 +618,7 @@ mod tests {
         smol::block_on(server.request_handler(get_request, None)).unwrap();
 
         let message = subscriber
-            .receiver()
+            .receiver
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
         let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
@@ -638,9 +641,9 @@ mod tests {
     fn user_put_and_get_ordered_set_test() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .subscribe(format!("{}/**", zenoh_prefix))
-            .wait()
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
+            .res()
             .unwrap();
 
         let key: ClientKey = "key".into();
@@ -667,7 +670,7 @@ mod tests {
         smol::block_on(server.request_handler(put_request, None)).unwrap();
 
         let message = subscriber
-            .receiver()
+            .receiver
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
         let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
@@ -695,7 +698,7 @@ mod tests {
         smol::block_on(server.request_handler(get_request, None)).unwrap();
 
         let message = subscriber
-            .receiver()
+            .receiver
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
         let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
@@ -726,9 +729,9 @@ mod tests {
     fn user_put_and_get_causal_test() {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
-        let mut subscriber = zenoh
-            .subscribe(format!("{}/**", zenoh_prefix))
-            .wait()
+        let subscriber = zenoh
+            .declare_subscriber(format!("{zenoh_prefix}/**"))
+            .res()
             .unwrap();
 
         let key: ClientKey = "key".into();
@@ -761,7 +764,7 @@ mod tests {
         smol::block_on(server.request_handler(put_request, None)).unwrap();
 
         let message = subscriber
-            .receiver()
+            .receiver
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
         let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
@@ -789,7 +792,7 @@ mod tests {
         smol::block_on(server.request_handler(get_request, None)).unwrap();
 
         let message = subscriber
-            .receiver()
+            .receiver
             .recv_timeout(Duration::from_secs(10))
             .unwrap();
         let response: Response = serde_json::from_str(&message.value.as_string().unwrap()).unwrap();

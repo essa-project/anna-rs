@@ -17,6 +17,7 @@ use std::{
     convert::TryFrom,
     time::{Duration, Instant},
 };
+use zenoh::prelude::r#async::AsyncResolve;
 
 // Define the data redistribute threshold
 const DATA_REDISTRIBUTE_THRESHOLD: usize = 50;
@@ -192,6 +193,7 @@ impl KvsNode {
                     .context("failed to serialize report Request message")?;
                 self.zenoh
                     .put(&target_address, serialized)
+                    .res()
                     .await
                     .map_err(|e| eyre!(e))?;
             }
@@ -231,6 +233,7 @@ impl KvsNode {
                 serde_json::to_string(&msg).context("failed to serialize KeyRequest")?;
             self.zenoh
                 .put(&addr.clone(), serialized)
+                .res()
                 .await
                 .map_err(|e| eyre!(e))
                 .context("failed to send gossip message")?;

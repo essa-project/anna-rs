@@ -12,6 +12,7 @@ use eyre::{anyhow, eyre, Context};
 use rand::prelude::SliceRandom;
 use smol::net::TcpStream;
 use std::collections::{HashMap, HashSet};
+use zenoh::prelude::r#async::AsyncResolve;
 
 mod consistent_hash_map;
 
@@ -170,6 +171,7 @@ impl HashRingUtil {
     /// that corresponds to the given `key`. The response will be sent to the
     /// specified `response_address`. The hash ring parameters are needed for finding
     /// the responsible threads.
+    #[allow(clippy::too_many_arguments)]
     pub async fn issue_replication_factor_request(
         &self,
         response_address: String,
@@ -212,6 +214,7 @@ impl HashRingUtil {
 
             zenoh
                 .put(&target_address, serialized)
+                .res()
                 .await
                 .map_err(|e| eyre!(e))
                 .context("failed to send replication factor request")?;

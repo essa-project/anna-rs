@@ -6,6 +6,7 @@ use crate::{
 };
 use eyre::Context;
 use std::collections::{HashMap, HashSet};
+use zenoh::prelude::r#async::AsyncResolve;
 
 impl KvsNode {
     /// Handles incoming self depart messages.
@@ -37,6 +38,7 @@ impl KvsNode {
                             serde_json::to_string(&depart_message)
                                 .context("failed to serialize depart message")?,
                         )
+                        .res()
                         .await
                         .map_err(|e| eyre::eyre!(e))?;
                 }
@@ -52,6 +54,7 @@ impl KvsNode {
                         &RoutingThread::new(node_id.clone(), 0).notify_topic(&self.zenoh_prefix),
                         notify_message.as_str(),
                     )
+                    .res()
                     .await
                     .map_err(|e| eyre::eyre!(e))?;
             }
@@ -62,6 +65,7 @@ impl KvsNode {
                     &MonitoringThread::notify_topic(&self.zenoh_prefix),
                     notify_message.as_str(),
                 )
+                .res()
                 .await
                 .map_err(|e| eyre::eyre!(e))?;
 
@@ -73,6 +77,7 @@ impl KvsNode {
                             .self_depart_topic(&self.zenoh_prefix),
                         serialized,
                     )
+                    .res()
                     .await
                     .map_err(|e| eyre::eyre!(e))?;
             }
@@ -119,6 +124,7 @@ impl KvsNode {
                     node_id: self.node_id.clone(),
                 })?,
             )
+            .res()
             .await
             .map_err(|e| eyre::eyre!(e))?;
 
@@ -129,7 +135,8 @@ impl KvsNode {
 
 #[cfg(test)]
 mod tests {
-    use zenoh::prelude::{Receiver, ZFuture};
+
+    use zenoh::prelude::sync::SyncResolve;
 
     use crate::{
         messages::{Departed, SelfDepart, Tier},
@@ -143,12 +150,15 @@ mod tests {
         let zenoh = zenoh_test_instance();
         let zenoh_prefix = uuid::Uuid::new_v4().to_string();
         let self_depart = SelfDepart {
-            response_topic: format!("{}/self_depart_test_response_address", zenoh_prefix),
+            response_topic: format!("{zenoh_prefix}/self_depart_test_response_address"),
         };
 
-        let mut subscriber = zenoh.subscribe(&self_depart.response_topic).wait().unwrap();
+        let subscriber = zenoh
+            .declare_subscriber(&self_depart.response_topic)
+            .res()
+            .unwrap();
 
-        let mut server = kvs_test_instance(zenoh.clone(), zenoh_prefix.clone());
+        let mut server = kvs_test_instance(zenoh.clone(), zenoh_prefix);
         assert_eq!(server.global_hash_rings[&Tier::Memory].len(), 3000);
         assert_eq!(
             server.global_hash_rings[&Tier::Memory].unique_nodes().len(),
@@ -158,7 +168,7 @@ mod tests {
         smol::block_on(server.self_depart_handler(&serialized)).unwrap();
 
         let message = subscriber
-            .receiver()
+            .receiver
             .recv_timeout(Duration::from_secs(5))
             .unwrap();
 
@@ -168,10 +178,7 @@ mod tests {
             0
         );
 
-        assert_eq!(
-            message.key_expr.try_as_str().unwrap(),
-            self_depart.response_topic
-        );
+        assert_eq!(message.key_expr.as_str(), self_depart.response_topic);
         let depart_msg: Departed =
             serde_json::from_str(&message.value.as_string().unwrap()).unwrap();
         assert_eq!(
